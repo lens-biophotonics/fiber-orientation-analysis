@@ -1,0 +1,6 @@
+# ignored folders
+__pycache__/
+.vscode/
+
+# ignored files
+*.pyc
