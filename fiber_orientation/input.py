@@ -7,12 +7,12 @@ import tifffile as tiff
 from h5py import File
 from zetastitcher import VirtualFusedVolume
 
-from modules.cidre import correct_illumination
-from modules.output import create_save_dir
-from modules.preprocessing import config_anisotropy_correction
-from modules.printing import (colored, print_import_time, print_resolution,
-                              print_volume_shape)
-from modules.utils import get_item_bytes
+from fiber_orientation.cidre import correct_illumination
+from fiber_orientation.output import create_save_dir
+from fiber_orientation.preprocessing import config_anisotropy_correction
+from fiber_orientation.printing import (colored, print_import_time, print_resolution,
+                                        print_volume_shape)
+from fiber_orientation.utils import get_item_bytes
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
@@ -68,10 +68,10 @@ def cli_parser_config():
     my_parser.add_argument('--psf-fwhm-y', type=float, default=0.692, help='PSF FWHM along the Y axis [μm]')
     my_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]\n')
     my_parser.add_argument('--cp', '--cidre-path', type=str,
-                           help='path to CIDRE correction models (see modules.cidre correct_illumination)')
+                           help='path to CIDRE correction models (see fiber_orientation.cidre correct_illumination)')
     my_parser.add_argument('--cm', '--cidre-mode', default=None, type=int,
                            help='CIDRE illumination correction '
-                                '(options: 0, 1, 2; refer to modules.cidre)')
+                                '(options: 0, 1, 2; refer to fiber_orientation.cidre)')
     my_parser.add_argument('--ch-fiber', type=int, default=1, help='myelinated fibers channel')
     my_parser.add_argument('--ch-neuron', type=int, default=0, help='neuronal soma channel')
     my_parser.add_argument('--z-min', type=int, default=0, help='forced minimum output z-depth')

@@ -5,7 +5,7 @@ import numpy as np
 from numba import njit
 from scipy import ndimage as ndi
 
-from modules.utils import divide_nonzero
+from fiber_orientation.utils import divide_nonzero
 
 
 def frangi_filter(image, sigma_px=1, alpha=0.001, beta=1.0, gamma=None,

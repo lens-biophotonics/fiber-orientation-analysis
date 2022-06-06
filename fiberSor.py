@@ -1,9 +1,9 @@
-from modules.input import (cli_parser_config, load_pipeline_config,
-                           load_input_volume)
-from modules.pipeline import (iterate_frangi_on_slices, iterate_odf_on_slices,
-                              save_frangi_volumes, save_odf_volumes)
-from modules.printing import print_odf_heading, print_pipeline_heading
-from modules.utils import delete_tmp_files
+from fiber_orientation.input import (cli_parser_config, load_pipeline_config,
+                                     load_input_volume)
+from fiber_orientation.pipeline import (iterate_frangi_on_slices, iterate_odf_on_slices,
+                                        save_frangi_volumes, save_odf_volumes)
+from fiber_orientation.printing import print_odf_heading, print_pipeline_heading
+from fiber_orientation.utils import delete_tmp_files
 
 
 def fiberSor(cli_parser):

@@ -1,5 +1,5 @@
 import numpy as np
-from modules.utils import round_to_multiple
+from fiber_orientation.utils import round_to_multiple
 
 
 def config_frangi_slicing(volume_shape, volume_item_size, px_size, px_size_iso,

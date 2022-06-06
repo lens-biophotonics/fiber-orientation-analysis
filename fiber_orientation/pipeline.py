@@ -3,20 +3,20 @@ from time import perf_counter
 
 import numpy as np
 
-from modules.frangi import config_frangi_scales, frangi_filter
-from modules.input import get_volume_info
-from modules.odf import compute_scaled_odf, get_sh_coef_num
-from modules.output import save_array
-from modules.preprocessing import correct_tpfm_anisotropy
-from modules.printing import (colored, print_analysis_time,
-                              print_frangi_heading, print_masking_info,
-                              print_odf_supervoxel, print_slice_progress,
-                              print_slicing_info)
-from modules.slicing import (compute_chunk_range, config_frangi_slicing,
-                             configure_odf_slicing, crop_chunk, slice_channel)
-from modules.utils import (create_background_mask, create_hdf5_file,
-                           get_item_bytes, orient_colormap, transform_axes,
-                           vector_colormap)
+from fiber_orientation.frangi import config_frangi_scales, frangi_filter
+from fiber_orientation.input import get_volume_info
+from fiber_orientation.odf import compute_scaled_odf, get_sh_coef_num
+from fiber_orientation.output import save_array
+from fiber_orientation.preprocessing import correct_tpfm_anisotropy
+from fiber_orientation.printing import (colored, print_analysis_time,
+                                        print_frangi_heading, print_masking_info,
+                                        print_odf_supervoxel, print_slice_progress,
+                                        print_slicing_info)
+from fiber_orientation.slicing import (compute_chunk_range, config_frangi_slicing,
+                                       configure_odf_slicing, crop_chunk, slice_channel)
+from fiber_orientation.utils import (create_background_mask, create_hdf5_file,
+                                     get_item_bytes, orient_colormap, transform_axes,
+                                     vector_colormap)
 
 
 def init_frangi_volumes(volume_shape, chunk_shape, resize_ratio,

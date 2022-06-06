@@ -2,8 +2,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage.transform import resize
 
-from modules.printing import colored
-from modules.utils import fwhm_to_sigma
+from fiber_orientation.printing import colored
+from fiber_orientation.utils import fwhm_to_sigma
 
 
 def config_anisotropy_correction(px_size, psf_fwhm):
