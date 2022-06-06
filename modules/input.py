@@ -1,6 +1,5 @@
-import argparse
 import os
-from argparse import RawTextHelpFormatter
+import argparse
 from time import perf_counter
 
 import numpy as np
@@ -16,6 +15,11 @@ from modules.printing import (colored, print_import_time, print_resolution,
 from modules.utils import get_item_bytes
 
 
+class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
+                      argparse.RawTextHelpFormatter):
+    pass
+
+
 def cli_parser_config():
     """
     Configure the CLI argument parser object.
@@ -29,112 +33,58 @@ def cli_parser_config():
     Configured CLI argument parser
     """
     my_parser = argparse.ArgumentParser(
-        description='fiberSor: A 3D Fiber Orientation Analysis Pipeline\n' +
-                    'author:     Michele Sorelli (2022)\n' +
-                    'references: Frangi  et al.  (1998) ' +
-                    'Multiscale vessel enhancement filtering.' +
-                    ' In Medical Image Computing and' +
-                    ' Computer-Assisted Intervention 1998, pp. 130-137.\n' +
-                    '            Alimi   et al.  (2020) ' +
-                    'Analytical and fast Fiber Orientation Distribution ' +
-                    'reconstruction in 3D-Polarized Light Imaging. ' +
+        description='fiberSor: A 3D Fiber Orientation Analysis Pipeline\n'
+                    'author:     Michele Sorelli (2022)\n'
+                    'references: Frangi  et al.  (1998) '
+                    'Multiscale vessel enhancement filtering.'
+                    ' In Medical Image Computing and'
+                    ' Computer-Assisted Intervention 1998, pp. 130-137.\n'
+                    '            Alimi   et al.  (2020) '
+                    'Analytical and fast Fiber Orientation Distribution '
+                    'reconstruction in 3D-Polarized Light Imaging. '
                     'Medical Image Analysis, 65, pp. 101760.\n\n',
-        formatter_class=RawTextHelpFormatter)
+        formatter_class=CustomFormatter)
     my_parser.add_argument(dest='volume_path',
-                           help='path to input data volume\n' +
-                                '. supported formats: .tif, .npy, ' +
-                                '.yml (ZetaStitcher stitch file), ' +
-                                '.h5 (4D dataset of fiber vectors)\n' +
-                                '. image  axes layout: (Z, Y, X)\n' +
-                                '. vector axes layout: (Z, Y, X, 3)\n\n')
+                           help='path to input data volume\n'
+                                '* supported formats: .tif, .npy, .yml (ZetaStitcher stitch file), '
+                                '.h5 (4D dataset of fiber vectors)\n'
+                                '* image  axes order: (Z, Y, X)\n'
+                                '* vector axes order: (Z, Y, X, 3)')
     my_parser.add_argument('-a', '--alpha', type=float, default=0.001,
-                           dest='alpha',
-                           help='Frangi plate-like object sensitivity\n' +
-                                'default: 0.001\n\n')
+                           help='Frangi plate-like object sensitivity')
     my_parser.add_argument('-b', '--beta', type=float, default=1.0,
-                           dest='beta',
-                           help='Frangi blob-like object sensitivity\n' +
-                                'default: 1.0\n\n')
+                           help='Frangi blob-like object sensitivity')
     my_parser.add_argument('-g', '--gamma', type=float, default=None,
-                           dest='gamma',
-                           help='Frangi background score sensitivity\n' +
-                                'default: automatic\n\n')
-    my_parser.add_argument('-s', '--scales', nargs='+', type=float,
-                           default=[1.25], dest='scales',
-                           help='list of Frangi filter scales [μm]\n' +
-                                'default: 1.25μm\n\n')
-    my_parser.add_argument('-n', '--neuron-mask', action='store_true',
-                           default=False, dest='neuron_mask',
-                           help='lipofuscin-based neuronal body masking\n' +
-                                'default: False\n\n')
-    my_parser.add_argument('-m', '--max-slice',
-                           default=100.0, dest='max_slice_size', type=float,
-                           help='maximum size (in bytes) of the basic image ' +
-                                'slices analyzed iteratively\n' +
-                                'default: 100MB\n\n')
-    my_parser.add_argument('--px-size-xy', type=float, default=0.878,
-                           dest='px_size_xy',
-                           help='lateral pixel size [μm]\n' +
-                                'default: 0.878μm\n\n')
-    my_parser.add_argument('--px-size-z', type=float, default=1.0,
-                           dest='px_size_z',
-                           help='longitudinal pixel size [μm]\n' +
-                                'default: 1.000μm\n\n')
-    my_parser.add_argument('--psf-fwhm-x', type=float, default=0.692,
-                           dest='psf_fwhm_x',
-                           help='PSF FWHM along the X axis [μm]\n' +
-                                'default: 0.692μm\t   (MAGIC protocol; ' +
-                                'Two-Photon Microscope, LENS)\n\n')
-    my_parser.add_argument('--psf-fwhm-y', type=float, default=0.692,
-                           dest='psf_fwhm_y',
-                           help='PSF FWHM along the Y axis [μm]\n' +
-                                'default: 0.692μm\t   (MAGIC protocol; ' +
-                                'Two-Photon Microscope, LENS)\n\n')
-    my_parser.add_argument('--psf-fwhm-z', type=float, default=2.612,
-                           dest='psf_fwhm_z',
-                           help='PSF FWHM along the Z axis [μm]\n' +
-                                'default: 2.612μm\t   (MAGIC protocol; ' +
-                                'Two-Photon Microscope, LENS)\n\n')
-    my_parser.add_argument('--cp', '--cidre-path',
-                           default='/mnt/NASone/michele/fiberSor/cidre',
-                                   dest='cidre_path', type=str,
-                           help='path to CIDRE correction models ' +
-                                '(see modules.cidre correct_illumination)' +
-                                '\ndefault: /mnt/NASone/michele/' +
-                                'fiberSor/cidre\n\n')
-    my_parser.add_argument('--cm', '--cidre-mode',
-                           default=None, dest='cidre_mode', type=int,
-                           help='CIDRE illumination correction ' +
-                                '(options: 0, 1, 2; refer to modules.cidre)' +
-                                '\ndefault: None\n\n')
-    my_parser.add_argument('--ch-fiber', type=int, default=1,
-                           dest='ch_fiber',
-                           help='myelinated fibers channel\n' +
-                                'default: 1 (green)\n\n')
-    my_parser.add_argument('--ch-neuron', type=int, default=0,
-                           dest='ch_neuron',
-                           help='neuronal soma channel\n' +
-                                'default: 0 (red)\n\n')
-    my_parser.add_argument('--z-min', type=int, default=0,
-                           dest='z_min',
-                           help='forced minimum output z-depth\n\n')
-    my_parser.add_argument('--z-max', type=int, default=None,
-                           dest='z_max',
-                           help='forced maximum output z-depth\n\n')
-    my_parser.add_argument('--or', '--odf-res', nargs='+', type=float,
-                           default=[], dest='odf_res',
-                           help='side of the ODF super-voxels [μm]' +
-                                '\ndefault: [] (do not estimate ODFs)\n\n')
-    my_parser.add_argument('--oo', '--odf-order', type=int,
-                           default=6, dest='odf_order',
-                           help='spherical harmonics series expansion order ' +
-                                '(even number between 2 and 10)\n' +
-                                'default: 6\n\n')
+                           help='Frangi background score sensitivity')
+    my_parser.add_argument('-s', '--scales', nargs='+', type=float, default=[1.25],
+                           help='list of Frangi filter scales [μm]')
+    my_parser.add_argument('-n', '--neuron-mask', action='store_true', default=False,
+                           help='lipofuscin-based neuronal body masking')
+    my_parser.add_argument('-m', '--max-slice-size', default=100.0, type=float,
+                           help='maximum size (in MegaBytes) of the basic image slices analyzed iteratively')
+    my_parser.add_argument('--px-size-xy', type=float, default=0.878, help='lateral pixel size [μm]')
+    my_parser.add_argument('--px-size-z', type=float, default=1.0, help='longitudinal pixel size [μm]')
+    my_parser.add_argument('--psf-fwhm-x', type=float, default=0.692, help='PSF FWHM along the X axis [μm]')
+    my_parser.add_argument('--psf-fwhm-y', type=float, default=0.692, help='PSF FWHM along the Y axis [μm]')
+    my_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]\n')
+    my_parser.add_argument('--cp', '--cidre-path', type=str,
+                           help='path to CIDRE correction models (see modules.cidre correct_illumination)')
+    my_parser.add_argument('--cm', '--cidre-mode', default=None, type=int,
+                           help='CIDRE illumination correction '
+                                '(options: 0, 1, 2; refer to modules.cidre)')
+    my_parser.add_argument('--ch-fiber', type=int, default=1, help='myelinated fibers channel')
+    my_parser.add_argument('--ch-neuron', type=int, default=0, help='neuronal soma channel')
+    my_parser.add_argument('--z-min', type=int, default=0, help='forced minimum output z-depth')
+    my_parser.add_argument('--z-max', type=int, default=None, help='forced maximum output z-depth')
+    my_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the ODF super-voxels [μm]')
+    my_parser.add_argument('--odf-order', type=int, default=6,
+                           help='spherical harmonics series expansion order '
+                                '(even number between 2 and 10)')
 
     return my_parser
 
 
-def load_input_volume(parser, cidre_mode=None):
+def load_input_volume(parser):
     """
     Load TPFM volume from TIFF, NumPy or ZetaStitcher .yml file.
     Apply CIDRE-based illumination correction if required.
@@ -145,9 +95,6 @@ def load_input_volume(parser, cidre_mode=None):
     Parameters
     ----------
     parser: argument parser object
-
-    cidre_mode: int
-        correction mode flag
 
     Returns
     -------
@@ -200,7 +147,7 @@ def load_input_volume(parser, cidre_mode=None):
         # CIDRE illumination correction
         cidre_path = args.cidre_path
         cidre_mode = args.cidre_mode
-        if cidre_mode is not None:
+        if cidre_mode and cidre_path:
             volume_path = correct_illumination(volume_path, models=cidre_path,
                                                mosaic=mosaic, mode=cidre_mode)
 
