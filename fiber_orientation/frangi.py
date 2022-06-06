@@ -2,6 +2,7 @@
 
 import multiprocessing as mp
 from functools import partial
+from itertools import combinations_with_replacement
 
 import numpy as np
 from numba import njit
@@ -115,12 +116,176 @@ def compute_scaled_orientation(sigma_px, image, alpha=0.001, beta=1,
     enhanced_array: ndarray (shape=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood function
     """
+    # Hessian estimation and eigenvalue decomposition
     eigenvalues, eigenvectors = analyze_hessian_eigen(image, sigma_px)
+
+    # compute Frangi's vesselness probability
     enhanced_array = \
         compute_scaled_vesselness(*eigenvalues, alpha=alpha, beta=beta,
                                   gamma=gamma, dark=dark)
 
     return eigenvectors, enhanced_array
+
+
+def analyze_hessian_eigen(image, sigma, truncate=4):
+    """
+    Return the eigenvalues of the local Hessian matrices
+    of the input image array, sorted by absolute value (in ascending order),
+    along with the related eigenvectors.
+
+    Parameters
+    ----------
+    image: ndarray (shape=(Z,Y,X))
+        input 3D image
+
+    sigma: int
+        spatial scale [px]
+
+    truncate: int
+        truncate the Gaussian smoothing kernel at this many standard deviations
+        (default: 4)
+
+    Returns
+    -------
+    eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
+        dominant eigenvalues array
+
+    eigenvec: ndarray (shape=(Z,Y,X,3), dtype: float)
+        eigenvectors array
+    """
+    # compute scaled Hessian matrices
+    hessian = compute_scaled_hessian(image, sigma=sigma, truncate=truncate)
+
+    # compute dominant eigenvalues and related eigenvectors
+    eigenval, eigenvec = compute_dominant_eigen(hessian)
+
+    return eigenval, eigenvec
+
+
+def compute_scaled_hessian(image, sigma=1, truncate=4):
+    """
+    Computes the scaled and normalized Hessian matrices of the input image.
+    This is then used to estimate the Frangi's vesselness probability score.
+
+    The Hessian matrix at each 3D coordinate of the input image volume
+    is given by the following spatial second derivatives:
+    [ gzz, gzy, gzx ]
+    [ gyz, gyy, gyx ]
+    [ gxz, gxy, gxx ]
+
+    Parameters
+    ----------
+    image: ndarray
+        input 3D image
+
+    sigma: int
+        spatial scale [pixel]
+
+    truncate: int
+        truncate the Gaussian smoothing kernel at this many standard deviations
+        (default: 4)
+
+    Returns
+    -------
+    hessian: ndarray (shape=(Z,Y,X,3,3), dtype=float)
+        Hessian matrix of image second derivatives
+    """
+    # get number of dimensions
+    ndim = image.ndim
+    
+    # scale selection
+    scaled_image = ndi.gaussian_filter(image, sigma=sigma,
+                                       output=np.float32, truncate=truncate)
+
+    # compute the first order gradients
+    gradient_list = np.gradient(scaled_image)
+
+    # compute the Hessian elements
+    hessian_elements = [np.gradient(gradient_list[ax0], axis=ax1)
+                        for ax0, ax1 in combinations_with_replacement(range(ndim), 2)]
+
+    # scale the elements of the Hessian matrix
+    corr_factor = sigma ** 2
+    hessian_elements = [corr_factor * element for element in hessian_elements]
+
+    # create Hessian matrix from Hessian elements
+    hessian = np.zeros((ndim, ndim) + scaled_image.shape, dtype=scaled_image.dtype)
+    for index, (ax0, ax1) in enumerate(combinations_with_replacement(range(ndim), 2)):
+        element = hessian_elements[index]
+        hessian[ax0, ax1, ...] = element        
+        if ax0 != ax1:
+            hessian[ax1, ax0, ...] = element
+
+    # re-arrange axes
+    hessian = np.moveaxis(hessian, (0, 1), (-2, -1))
+
+    return hessian
+
+
+def compute_dominant_eigen(hessian):
+    """
+    Compute the eigenvalues (sorted by absolute value)
+    of the symmetrical Hessian matrix.
+
+    Parameters
+    ----------
+    hessian: ndarray
+        input array of local Hessian matrices
+
+    Returns
+    -------
+    sorted_eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
+        Hessian eigenvalues sorted by absolute value (ascending order)
+
+    dominant_eigenvec: ndarray (shape=(Z,Y,X,3), dtype: float)
+        Hessian eigenvectors related to the dominant (minimum) eigenvalue
+    """
+    # compute and sort the eigenvalues/eigenvectors
+    # of the image Hessian matrices
+    eigenval, eigenvec = np.linalg.eigh(hessian)
+    sorted_eigenval, sorted_eigenvec = sort_eigen(eigenval, eigenvec)
+
+    # select the eigenvectors related to dominant eigenvalues
+    dominant_eigenvec = sorted_eigenvec[..., 0]
+
+    return sorted_eigenval, dominant_eigenvec
+
+
+def sort_eigen(eigenval, eigenvec, axis=-1):
+    """
+    Sort eigenvalue/eigenvector arrays by absolute value along the given axis.
+
+    Parameters
+    ----------
+    eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
+        input eigenvalue array
+
+    eigenvec: ndarray (shape=(Z,Y,X,3,3), dtype: float)
+        input eigenvector array
+
+    axis: int
+        sorted axis
+
+    Returns
+    -------
+    sorted_eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
+        sorted eigenvalue array
+
+    sorted_eigenvec: ndarray (shape=(Z,Y,X,3,3), dtype: float)
+        sorted eigenvector array
+    """
+    # sort the eigenvalue array by absolute value (ascending order)
+    sorted_val_index = np.abs(eigenval).argsort(axis)
+    sorted_eigenval = np.take_along_axis(eigenval, sorted_val_index, axis)
+    sorted_eigenval = [np.squeeze(eigenval, axis=axis)
+                       for eigenval in np.split(sorted_eigenval,
+                       sorted_eigenval.shape[axis], axis=axis)]
+
+    # sort eigenvectors consistently
+    sorted_vec_index = sorted_val_index[:, :, :, np.newaxis, :]
+    sorted_eigenvec = np.take_along_axis(eigenvec, sorted_vec_index, axis)
+
+    return sorted_eigenval, sorted_eigenvec
 
 
 def compute_scaled_vesselness(eigen1, eigen2, eigen3,
@@ -291,178 +456,3 @@ def reject_background(image, eigen2, eigen3, negative_contrast):
     image[np.isnan(image)] = 0
 
     return image
-
-
-def compute_scaled_hessian(image, sigma=1, truncate=4):
-    """
-    Computes the scaled and normalized Hessian matrices of the input image.
-    This is then used to estimate the Frangi's vesselness probability score.
-
-    Parameters
-    ----------
-    image: ndarray
-        input 3D image
-
-    sigma: int
-        spatial scale [pixel]
-
-    truncate: int
-        truncate the Gaussian smoothing kernel at this many standard deviations
-        (default: 4)
-
-    Returns
-    -------
-    hessian: ndarray (shape=(Z,Y,X,3,3), dtype=float)
-        Hessian matrix of image second derivatives
-    """
-    # scale selection
-    scaled_image = ndi.gaussian_filter(image, sigma=sigma,
-                                       output=np.float32, truncate=truncate)
-
-    # compute Hessian array
-    hessian = compute_hessian(scaled_image)
-
-    # normalize derivatives with respect to scale
-    hessian = np.square(sigma) * hessian
-
-    return hessian
-
-
-def compute_hessian(scaled_image):
-    """
-    Computes the local Hessian matrices of the input image.
-    This is then used to estimate the Frangi's vesselness probability score.
-
-    The Hessian matrix at each 3D coordinate of the input image volume
-    is given by the following spatial second derivatives:
-    [ gzz, gzy, gzx ]
-    [ gyz, gyy, gyx ]
-    [ gxz, gxy, gxx ]
-
-    Parameters
-    ----------
-    scaled_image: ndarray
-        input 3D image (smoothed)
-
-    Returns
-    -------
-    hessian: ndarray (shape=(Z,Y,X,3,3), dtype=float)
-        Hessian matrix of image second derivatives
-    """
-    # initialize empty Hessian array
-    hessian \
-        = np.empty(scaled_image.shape + (scaled_image.ndim, scaled_image.ndim),
-                   dtype=scaled_image.dtype)
-
-    # compute gradient (twice)
-    grad = np.gradient(scaled_image)
-    for k, grad_k in enumerate(grad):
-
-        # iterate over dimensions
-        # apply gradient again to every component of the first derivative
-        tmp_grad = np.gradient(grad_k)
-        for j, grad_kl in enumerate(tmp_grad):
-            hessian[..., k, j] = grad_kl
-
-    return hessian
-
-
-def compute_dominant_eigen(hessian):
-    """
-    Compute the eigenvalues (sorted by absolute value)
-    of the symmetrical Hessian matrix.
-
-    Parameters
-    ----------
-    hessian: ndarray
-        input array of local Hessian matrices
-
-    Returns
-    -------
-    sorted_eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
-        Hessian eigenvalues sorted by absolute value (ascending order)
-
-    dominant_eigenvec: ndarray (shape=(Z,Y,X,3), dtype: float)
-        Hessian eigenvectors related to the dominant (minimum) eigenvalue
-    """
-    # compute and sort the eigenvalues/eigenvectors
-    # of the image Hessian matrices
-    eigenval, eigenvec = np.linalg.eigh(hessian)
-    sorted_eigenval, sorted_eigenvec = sort_eigen(eigenval, eigenvec)
-
-    # select the eigenvectors related to the dominant eigenvalues
-    dominant_eigenvec = sorted_eigenvec[..., 0]
-
-    return sorted_eigenval, dominant_eigenvec
-
-
-def sort_eigen(eigenval, eigenvec, axis=-1):
-    """
-    Sort eigenvalue/eigenvector arrays by absolute value along the given axis.
-
-    Parameters
-    ----------
-    eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
-        input eigenvalue array
-
-    eigenvec: ndarray (shape=(Z,Y,X,3,3), dtype: float)
-        input eigenvector array
-
-    axis: int
-        sorted axis
-
-    Returns
-    -------
-    sorted_eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
-        sorted eigenvalue array
-
-    sorted_eigenvec: ndarray (shape=(Z,Y,X,3,3), dtype: float)
-        sorted eigenvector array
-    """
-    # sort the eigenvalue array by absolute value (ascending order)
-    sorted_val_index = np.abs(eigenval).argsort(axis)
-    sorted_eigenval = np.take_along_axis(eigenval, sorted_val_index, axis)
-    sorted_eigenval = [np.squeeze(eigenval, axis=axis)
-                       for eigenval in np.split(sorted_eigenval,
-                       sorted_eigenval.shape[axis], axis=axis)]
-
-    # sort eigenvectors consistently
-    sorted_vec_index = sorted_val_index[:, :, :, np.newaxis, :]
-    sorted_eigenvec = np.take_along_axis(eigenvec, sorted_vec_index, axis)
-
-    return sorted_eigenval, sorted_eigenvec
-
-
-def analyze_hessian_eigen(image, sigma, truncate=4):
-    """
-    Return the eigenvalues of the local Hessian matrices
-    of the input image array, sorted by absolute value (in ascending order),
-    along with the related eigenvectors.
-
-    Parameters
-    ----------
-    image: ndarray (shape=(Z,Y,X))
-        input 3D image
-
-    sigma: int
-        spatial scale [px]
-
-    truncate: int
-        truncate the Gaussian smoothing kernel at this many standard deviations
-        (default: 4)
-
-    Returns
-    -------
-    eigenval: ndarray (shape=(Z,Y,X,3), dtype: float)
-        dominant eigenvalues array
-
-    eigenvec: ndarray (shape=(Z,Y,X,3), dtype: float)
-        eigenvectors array
-    """
-    # compute Hessian matrices
-    hessian = compute_scaled_hessian(image, sigma=sigma, truncate=truncate)
-
-    # compute dominant eigenvalues and eigenvectors
-    eigenval, eigenvec = compute_dominant_eigen(hessian)
-
-    return eigenval, eigenvec
