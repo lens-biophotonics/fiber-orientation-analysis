@@ -1,4 +1,4 @@
-from fiber_orientation.input import (cli_parser_config, load_pipeline_config,
+from fiber_orientation.input import (cli_parser, load_pipeline_config,
                                      load_input_volume)
 from fiber_orientation.pipeline import (iterate_frangi_on_slices, iterate_odf_on_slices,
                                         save_frangi_volumes, save_odf_volumes)
@@ -6,17 +6,17 @@ from fiber_orientation.printing import print_odf_heading, print_pipeline_heading
 from fiber_orientation.utils import delete_tmp_files
 
 
-def fiberSor(cli_parser):
+def fiberSor(cli_args):
 
     # load image volume or dataset of fiber orientation vectors
     volume, mosaic, skip_frangi \
-        = load_input_volume(cli_parser)
+        = load_input_volume(cli_args)
 
     # get pipeline configuration
     alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, \
         odf_scales_um, odf_orders, z_min, z_max, ch_neuron, ch_fiber, \
         max_slice_size, lpf_soma_mask, save_dir, volume_name \
-        = load_pipeline_config(cli_parser)
+        = load_pipeline_config(cli_args)
 
     # iteratively apply 3D Frangi-based fiber enhancement to basic image slices
     if not skip_frangi:
@@ -72,4 +72,4 @@ if __name__ == '__main__':
 
     # start fiberSor pipeline by terminal
     print_pipeline_heading()
-    fiberSor(cli_parser=cli_parser_config())
+    fiberSor(cli_args=cli_parser())

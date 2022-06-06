@@ -119,16 +119,17 @@ def print_resolution(px_size, psf_fwhm):
           .format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
-def print_volume_shape(volume, parser, mosaic):
+def print_volume_shape(cli_args, volume, mosaic):
     """
     Print TPFM volume shape.
 
     Parameters
     ----------
+    cli_args:
+        command line arguments
+
     volume: ndarray (shape=(Z,Y,X))
         input TPFM volume
-
-    parser: argument parser object
 
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
@@ -137,11 +138,9 @@ def print_volume_shape(volume, parser, mosaic):
     -------
     None
     """
-
     # retrieve TPFM pixel size
-    args = parser.parse_args()
-    px_size_z = args.px_size_z
-    px_size_xy = args.px_size_xy
+    px_size_z = cli_args.px_size_z
+    px_size_xy = cli_args.px_size_xy
 
     # adapt axis order
     if mosaic:
