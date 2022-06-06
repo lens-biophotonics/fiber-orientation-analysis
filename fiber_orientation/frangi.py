@@ -1,3 +1,5 @@
+# portions of code adapted from https://github.com/ellisdg/frangi3d (MIT license)
+
 import multiprocessing as mp
 from functools import partial
 
