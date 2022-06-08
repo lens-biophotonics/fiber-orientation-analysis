@@ -14,7 +14,7 @@ def fiberSor(cli_args):
 
     # get pipeline configuration
     alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, \
-        odf_scales_um, odf_orders, z_min, z_max, ch_neuron, ch_fiber, \
+        odf_scales_um, odf_degrees, z_min, z_max, ch_neuron, ch_fiber, \
         max_slice_size, lpf_soma_mask, save_dir, volume_name \
         = load_pipeline_config(cli_args)
 
@@ -48,7 +48,7 @@ def fiberSor(cli_args):
             iso_fiber_volume = None
 
         # print ODF analysis heading
-        print_odf_heading(odf_scales_um, odf_orders)
+        print_odf_heading(odf_scales_um, odf_degrees)
         for odf_scale_um in odf_scales_um:
             odf_volume, bg_mrtrix_volume, tmp_hdf5_list \
                 = iterate_odf_on_slices(vec_volume, iso_fiber_volume,
@@ -56,7 +56,7 @@ def fiberSor(cli_args):
                                         max_slice_size=max_slice_size,
                                         tmp_files=tmp_hdf5_list,
                                         odf_scale_um=odf_scale_um,
-                                        odf_orders=odf_orders)
+                                        odf_degrees=odf_degrees)
             odf_volume_list.append(odf_volume)
             bg_mrtrix_volume_list.append(bg_mrtrix_volume)
 

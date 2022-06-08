@@ -52,7 +52,7 @@ def print_frangi_heading(alpha, beta, gamma, scales_um):
     print("  Diameters  [\u03BCm]: {}".format(4*scales_um))
 
 
-def print_odf_heading(odf_scales_um, odf_order):
+def print_odf_heading(odf_scales_um, odf_degrees):
     """
     Print ODF analysis heading.
 
@@ -61,16 +61,16 @@ def print_odf_heading(odf_scales_um, odf_order):
     odf_scales_um: list (dtype: float)
         fiber ODF resolutions (super-voxel sides in [μm])
 
-    odf_order: int
-        order of the spherical harmonics series expansion
+    odf_degrees: int
+        degrees of the spherical harmonics series expansion
 
     Returns
     -------
     None
     """
     print(colored(0, 191, 255, "\n  3D ODF Analysis"))
-    print("\n  Resolution [\u03BCm]: {}".format(odf_scales_um))
-    print("  Expansion order: {}".format(odf_order))
+    print("\n  Resolution   [\u03BCm]: {}".format(odf_scales_um))
+    print("  Expansion degrees: {}".format(odf_degrees))
 
 
 def print_odf_supervoxel(volume_shape, px_size_iso, odf_scale_um):

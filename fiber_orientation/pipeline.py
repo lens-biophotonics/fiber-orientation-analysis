@@ -5,7 +5,7 @@ import numpy as np
 
 from fiber_orientation.frangi import config_frangi_scales, frangi_filter
 from fiber_orientation.input import get_volume_info
-from fiber_orientation.odf import compute_scaled_odf, get_sh_coef_num
+from fiber_orientation.odf import compute_scaled_odf, get_sph_harm_ncoeff
 from fiber_orientation.output import save_array
 from fiber_orientation.preprocessing import correct_tpfm_anisotropy
 from fiber_orientation.printing import (colored, print_analysis_time,
@@ -408,7 +408,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso,
         iso_fiber_volume, fiber_mask_volume, neuron_mask_volume
 
 
-def init_odf_volumes(vec_volume_shape, save_dir, odf_orders=6, odf_scale=15):
+def init_odf_volumes(vec_volume_shape, save_dir, odf_degrees=6, odf_scale=15):
     """
     Initialize the output datasets of the ODF analysis stage.
 
@@ -420,8 +420,8 @@ def init_odf_volumes(vec_volume_shape, save_dir, odf_orders=6, odf_scale=15):
     save_dir: str
         saving directory string path
 
-    odf_orders: int
-        orders of the spherical harmonics series expansion
+    odf_degrees: int
+        degrees of the spherical harmonics series expansion
 
     odf_scale: int
         fiber ODF resolution (super-voxel side in [px])
@@ -455,7 +455,7 @@ def init_odf_volumes(vec_volume_shape, save_dir, odf_orders=6, odf_scale=15):
     bg_tmp_dict = {'path': bg_tmp_path, 'obj': bg_tmp_file}
 
     # initialize ODF dataset
-    num_coeff = get_sh_coef_num(odf_orders)
+    num_coeff = get_sph_harm_ncoeff(odf_degrees)
     odf_shape = tuple(list(bg_shape) + [num_coeff])
     odf_tmp_path = path.join(save_dir, 'odf_tmp{}.h5'.format(odf_scale))
     odf_tmp_file, odf_volume \
@@ -471,7 +471,7 @@ def init_odf_volumes(vec_volume_shape, save_dir, odf_orders=6, odf_scale=15):
 
 def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
                           save_dir, max_slice_size=100.0, tmp_files=[],
-                          odf_scale_um=15, odf_orders=6, verbose=True):
+                          odf_scale_um=15, odf_degrees=6, verbose=True):
     """
     Iteratively estimate 3D fiber ODFs over basic orientation data chunks.
 
@@ -498,8 +498,8 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
     odf_scale_um: float
         fiber ODF resolution (super-voxel side in [μm])
 
-    odf_orders: int
-        orders of the spherical harmonics series expansion
+    odf_degrees: int
+        degrees of the spherical harmonics series expansion
 
     verbose: bool
         verbosity flag
@@ -532,7 +532,7 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
     # initialize ODF analysis output volumes
     odf_volume, bg_mrtrix_volume, odf_tmp_files, odf_volume_shape \
         = init_odf_volumes(vec_volume_shape, save_dir,
-                           odf_orders=odf_orders,
+                           odf_degrees=odf_degrees,
                            odf_scale=odf_scale)
     tmp_files = tmp_files + odf_tmp_files
 
@@ -573,7 +573,7 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
                 # ODF analysis
                 odf_chunk, bg_mrtrix_chunk, \
                     = compute_scaled_odf(odf_scale, vec_chunk, iso_fiber_chunk,
-                                         odf_patch_shape, orders=odf_orders)
+                                         odf_patch_shape, degrees=odf_degrees)
 
                 # transform axes
                 odf_chunk = transform_axes(odf_chunk,

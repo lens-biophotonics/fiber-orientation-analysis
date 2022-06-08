@@ -79,8 +79,8 @@ def cli_parser():
     cli_parser.add_argument('--z-min', type=int, default=0, help='forced minimum output z-depth')
     cli_parser.add_argument('--z-max', type=int, default=None, help='forced maximum output z-depth')
     cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the ODF super-voxels [μm]')
-    cli_parser.add_argument('--odf-order', type=int, default=6,
-                            help='spherical harmonics series expansion order '
+    cli_parser.add_argument('--odf-deg', type=int, default=6,
+                            help='degrees of the spherical harmonics series expansion '
                                  '(even number between 2 and 10)')
 
     # parse arguments
@@ -251,8 +251,8 @@ def load_pipeline_config(args):
     odf_scales_um: list (dtype: float)
         list of fiber ODF resolution values (super-voxel sides in [μm])
 
-    odf_order: int
-        order of the spherical harmonics series expansion
+    odf_degrees: int
+        degrees of the spherical harmonics series expansion
 
     z_min: int
         minimum output z-depth in [px]
@@ -300,7 +300,7 @@ def load_pipeline_config(args):
 
     # ODF analysis
     odf_scales_um = args.odf_res
-    odf_order = args.odf_order
+    odf_degrees = args.odf_deg
 
     # TPFM pixel size and PSF FWHM
     px_size, psf_fwhm = load_microscope_config(args)
@@ -319,7 +319,7 @@ def load_pipeline_config(args):
     save_dir = create_save_dir(volume_path)
 
     return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, \
-        odf_scales_um, odf_order, z_min, z_max, ch_neuron, ch_fiber, \
+        odf_scales_um, odf_degrees, z_min, z_max, ch_neuron, ch_fiber, \
         max_slice_size, lpf_soma_mask, save_dir, volume_name
 
 
