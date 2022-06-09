@@ -5,9 +5,7 @@ import numpy as np
 from astropy.visualization import make_lupton_rgb
 from h5py import File
 from matplotlib.colors import hsv_to_rgb
-from skimage.filters import (threshold_li, threshold_niblack,
-                             threshold_sauvola, threshold_triangle,
-                             threshold_yen)
+from skimage.filters import (threshold_li, threshold_niblack, threshold_sauvola, threshold_triangle, threshold_yen)                             
 from skimage.morphology import skeletonize_3d
 
 
@@ -87,8 +85,7 @@ def vector_colormap(vec_volume):
         image_r = vec_volume[z, :, :, 2]
         image_g = vec_volume[z, :, :, 1]
         image_b = vec_volume[z, :, :, 0]
-        rgb_map[z] = make_lupton_rgb(image_r, image_g, image_b, minimum=0,
-                                     stretch=1, Q=8)
+        rgb_map[z] = make_lupton_rgb(image_r, image_g, image_b, minimum=0, stretch=1, Q=8)                                     
 
     return rgb_map
 
@@ -119,13 +116,11 @@ def orient_colormap(vec_volume):
     vxy_abs = np.divide(vxy_abs, np.max(vxy_abs))
 
     # compute the in-plane angular orientation
-    vxy_ang = normalize_angle(np.arctan2(vy, vx), lower=0, upper=np.pi,
-                              dtype=np.float32)
+    vxy_ang = normalize_angle(np.arctan2(vy, vx), lower=0, upper=np.pi, dtype=np.float32)
     vxy_ang = np.divide(vxy_ang, np.pi)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=tuple(list(vec_volume_shape[:-1]) + [3]),
-                       dtype=np.uint8)
+    rgb_map = np.zeros(shape=tuple(list(vec_volume_shape[:-1]) + [3]), dtype=np.uint8)
     for z in range(vec_volume_shape[0]):
 
         # generate colormap slice by slice
@@ -178,8 +173,7 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
 
     # check limits
     if lower >= upper:
-        raise ValueError("Invalid lower and upper limits: (%s, %s)" %
-                         (lower, upper))
+        raise ValueError("Invalid lower and upper limits: (%s, %s)" % (lower, upper))
 
     # view
     norm_angle = angle
@@ -233,8 +227,7 @@ def normalize_image(image, max_out_value=255.0, dtype=np.uint8):
     # normalization
     if max_value != 0:
         if max_value != min_value:
-            norm_image = (((image - min_value) / (max_value - min_value)) *
-                          max_out_value).astype(dtype)
+            norm_image = (((image - min_value) / (max_value - min_value)) * max_out_value).astype(dtype)
         else:
             norm_image = ((image / max_value) * max_out_value).astype(dtype)
     else:
@@ -311,8 +304,7 @@ def create_hdf5_file(path, dset_shape, chunk_shape, dtype):
     dset: HDF5 dataset
     """
     file = File(path, 'w')
-    dset = file.create_dataset('chunked', tuple(dset_shape),
-                               chunks=tuple(chunk_shape), dtype=dtype)
+    dset = file.create_dataset('chunked', tuple(dset_shape), chunks=tuple(chunk_shape), dtype=dtype)
 
     return file, dset
 

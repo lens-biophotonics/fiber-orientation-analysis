@@ -93,8 +93,7 @@ def print_odf_supervoxel(volume_shape, px_size_iso, odf_scale_um):
     None
     """
     print("\n  Super-voxel [\u03BCm]:\t{0} x {1} x {1}"
-          .format(min(volume_shape[0] * px_size_iso[0], odf_scale_um),
-                  odf_scale_um))
+          .format(min(volume_shape[0] * px_size_iso[0], odf_scale_um), odf_scale_um))                  
 
 
 def print_resolution(px_size, psf_fwhm):
@@ -154,9 +153,7 @@ def print_volume_shape(cli_args, volume, mosaic):
 
     print("\n                                Z      Y      X")
     print("  TPFM volume shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(volume_shape[0]*px_size_z,
-                  volume_shape[1]*px_size_xy,
-                  volume_shape[2]*px_size_xy))
+          .format(volume_shape[0]*px_size_z, volume_shape[1]*px_size_xy, volume_shape[2]*px_size_xy))                  
 
 
 def print_masking_info(lpf_soma_mask):
@@ -206,12 +203,10 @@ def print_slicing_info(volume_shape_um, patch_shape_um, px_size,
         patch_shape_um = volume_shape_um
 
     # get volume memory size
-    volume_size = \
-        volume_item_size * np.prod(np.divide(volume_shape_um, px_size))
+    volume_size = volume_item_size * np.prod(np.divide(volume_shape_um, px_size))
 
     # get slice memory size
-    max_slice_size = \
-        volume_item_size * np.prod(np.divide(patch_shape_um, px_size))
+    max_slice_size = volume_item_size * np.prod(np.divide(patch_shape_um, px_size))
 
     # print info
     print("\n                                Z      Y      X")
@@ -263,12 +258,10 @@ def print_analysis_time(start_time, tot_slices=None):
     if tot_slices is not None:
         mins_per_slice = (total / tot_slices) // 60
         secs_per_slice = (total / tot_slices) % 60
-        print("\n\n  Process completed in: " +
-              "{0} min {1:3.1f} s ({2} min {3:3.1f} s per slice)\n"
+        print("\n\n  Process completed in: {0} min {1:3.1f} s ({2} min {3:3.1f} s per slice)\n"              
               .format(mins, secs, mins_per_slice, secs_per_slice))
     else:
-        print("\n  Process completed in: " +
-              "{0} min {1:3.1f} s\n".format(mins, secs))
+        print("\n  Process completed in: {0} min {1:3.1f} s\n".format(mins, secs))              
 
 
 def elapsed_time(start_time):

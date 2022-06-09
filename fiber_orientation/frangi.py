@@ -11,8 +11,7 @@ from scipy import ndimage as ndi
 from fiber_orientation.utils import divide_nonzero
 
 
-def frangi_filter(image, sigma_px=1, alpha=0.001, beta=1.0, gamma=None,
-                  dark_fibers=True):
+def frangi_filter(image, sigma_px=1, alpha=0.001, beta=1.0, gamma=None, dark_fibers=True):
     """
     Apply 3D Frangi filter to input image.
 
@@ -53,37 +52,31 @@ def frangi_filter(image, sigma_px=1, alpha=0.001, beta=1.0, gamma=None,
     n_scales = len(sigma_px)
     if n_scales == 1:
         fiber_vectors, enhanced_array \
-            = compute_scaled_orientation(sigma_px[0], image,
-                                         alpha=alpha, beta=beta, gamma=gamma,
-                                         dark=dark_fibers)
+            = compute_scaled_orientation(sigma_px[0], image, alpha=alpha, beta=beta, gamma=gamma,  dark=dark_fibers)
+
     # parallel scaled vesselness analysis
     else:
         par_compute_orientation \
-            = partial(compute_scaled_orientation, image=image,
-                      alpha=alpha, beta=beta, gamma=gamma, dark=dark_fibers)
+            = partial(compute_scaled_orientation, image=image, alpha=alpha, beta=beta, gamma=gamma, dark=dark_fibers)
+
         with mp.Pool(n_scales) as p:
-            eigenvectors_list, enhanced_array_list \
-                = zip(*p.map(par_compute_orientation, sigma_px))
+            eigenvectors_list, enhanced_array_list = zip(*p.map(par_compute_orientation, sigma_px))
         eigenvectors = np.stack(eigenvectors_list, axis=0)
         enhanced_array = np.stack(enhanced_array_list, axis=0)
 
         # get max scale-wise vesselness
         best_idx = np.argmax(enhanced_array, axis=0)
         best_idx = np.expand_dims(best_idx, axis=0)
-        enhanced_array = \
-            np.take_along_axis(enhanced_array,
-                               best_idx, axis=0).squeeze(axis=0)
+        enhanced_array = np.take_along_axis(enhanced_array, best_idx, axis=0).squeeze(axis=0)
 
         # select dominant eigenvalues (and associated eigenvectors)
         best_idx = np.expand_dims(best_idx, axis=-1)
-        fiber_vectors = \
-            np.take_along_axis(eigenvectors, best_idx, axis=0).squeeze(axis=0)
+        fiber_vectors = np.take_along_axis(eigenvectors, best_idx, axis=0).squeeze(axis=0)
 
     return enhanced_array, fiber_vectors
 
 
-def compute_scaled_orientation(sigma_px, image, alpha=0.001, beta=1,
-                               gamma=None, dark=False):
+def compute_scaled_orientation(sigma_px, image, alpha=0.001, beta=1, gamma=None, dark=False):
     """
     Estimate fiber orientation vectors at input spatial scale.
 
@@ -120,9 +113,7 @@ def compute_scaled_orientation(sigma_px, image, alpha=0.001, beta=1,
     eigenvalues, eigenvectors = analyze_hessian_eigen(image, sigma_px)
 
     # compute Frangi's vesselness probability
-    enhanced_array = \
-        compute_scaled_vesselness(*eigenvalues, alpha=alpha, beta=beta,
-                                  gamma=gamma, dark=dark)
+    enhanced_array = compute_scaled_vesselness(*eigenvalues, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
     return eigenvectors, enhanced_array
 
@@ -194,8 +185,7 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     ndim = image.ndim
     
     # scale selection
-    scaled_image = ndi.gaussian_filter(image, sigma=sigma,
-                                       output=np.float32, truncate=truncate)
+    scaled_image = ndi.gaussian_filter(image, sigma=sigma, output=np.float32, truncate=truncate)                                       
 
     # compute the first order gradients
     gradient_list = np.gradient(scaled_image)
@@ -278,8 +268,7 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
     sorted_val_index = np.abs(eigenval).argsort(axis)
     sorted_eigenval = np.take_along_axis(eigenval, sorted_val_index, axis)
     sorted_eigenval = [np.squeeze(eigenval, axis=axis)
-                       for eigenval in np.split(sorted_eigenval,
-                       sorted_eigenval.shape[axis], axis=axis)]
+                       for eigenval in np.split(sorted_eigenval, sorted_eigenval.shape[axis], axis=axis)]
 
     # sort eigenvectors consistently
     sorted_vec_index = sorted_val_index[:, :, :, np.newaxis, :]
@@ -288,8 +277,7 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
     return sorted_eigenval, sorted_eigenvec
 
 
-def compute_scaled_vesselness(eigen1, eigen2, eigen3,
-                              alpha, beta, gamma, dark):
+def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
     """
     Estimate Frangi's vesselness probability.
 
@@ -326,8 +314,7 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3,
     plate = compute_plate_like_score(ra, alpha)
     blob = compute_blob_like_score(rb, beta)
     background = compute_background_score(s, gamma)
-    vesselness = \
-        reject_background(plate * blob * background, eigen2, eigen3, dark)
+    vesselness = reject_background(plate * blob * background, eigen2, eigen3, dark)        
 
     return vesselness
 
@@ -389,10 +376,8 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
     gamma: float
         background score sensitivity
     """
-    ra = divide_nonzero(np.abs(eigen2),
-                        np.abs(eigen3))
-    rb = divide_nonzero(np.abs(eigen1),
-                        np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
+    ra = divide_nonzero(np.abs(eigen2), np.abs(eigen3))
+    rb = divide_nonzero(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
     s = compute_structureness(eigen1, eigen2, eigen3)
 
     # compute 'auto' gamma sensitivity
@@ -414,8 +399,7 @@ def compute_blob_like_score(rb, beta):
 
 @njit(cache=True)
 def compute_background_score(s, gamma):
-    return 1 - np.exp(np.divide(np.negative(np.square(s)),
-                                (2 * np.square(gamma))))
+    return 1 - np.exp(np.divide(np.negative(np.square(s)), (2 * np.square(gamma))))
 
 
 @njit(cache=True)

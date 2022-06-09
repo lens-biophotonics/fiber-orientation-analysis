@@ -65,9 +65,7 @@ def generate_odf_background(bg_volume, vxl_side):
         downsampled ODF background (fiber channel)
     """
     # get shape of new downsampled array
-    new_shape \
-        = tuple(np.ceil(np.divide(bg_volume.shape[:3],
-                                  vxl_side)).astype(int))
+    new_shape = tuple(np.ceil(np.divide(bg_volume.shape[:3],  vxl_side)).astype(int))                                     
 
     # loop over z-slices, and resize them
     bg_mrtrix = np.zeros(new_shape, dtype=np.uint8)
@@ -80,9 +78,7 @@ def generate_odf_background(bg_volume, vxl_side):
             tmp_slice = 255.0*np.sum(np.abs(bg_volume[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
             tmp_slice = tmp_slice.astype(np.uint8)
-        bg_mrtrix[z_out, ...] = resize(tmp_slice,
-                                       output_shape=new_shape[1:],
-                                       anti_aliasing=True, preserve_range=True)
+        bg_mrtrix[z_out, ...] = resize(tmp_slice, output_shape=new_shape[1:], anti_aliasing=True, preserve_range=True)
         z_out += 1
 
     return bg_mrtrix
@@ -389,11 +385,10 @@ def norm_factor(n, m):
     normalization factor
     """
     if m == 0:
-        return np.sqrt((2 * n + 1)/(4 * np.pi))
+        return np.sqrt((2 * n + 1) / (4 * np.pi))
     else:
-        return (-1)**m * np.sqrt(2) \
-            * np.sqrt(((2 * n + 1)/(4 * np.pi) *
-                       (factorial(n - np.abs(m)) / factorial(n + np.abs(m)))))
+        return (-1)**m * np.sqrt(2) * np.sqrt(((2 * n + 1) / (4 * np.pi) *
+                                               (factorial(n - np.abs(m)) / factorial(n + np.abs(m)))))
 
 
 @njit(cache=True)

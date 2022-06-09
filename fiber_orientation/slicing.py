@@ -2,8 +2,7 @@ import numpy as np
 from fiber_orientation.utils import round_to_multiple
 
 
-def config_frangi_slicing(volume_shape, volume_item_size, px_size, px_size_iso,
-                          smooth_sigma, max_slice_size=100.0):
+def config_frangi_slicing(volume_shape, volume_item_size, px_size, px_size_iso, smooth_sigma, max_slice_size=100.0):                          
     """
     Slicing configuration for the iterative Frangi filtering of basic chunks
     of the input microscopy volume.
@@ -47,25 +46,20 @@ def config_frangi_slicing(volume_shape, volume_item_size, px_size, px_size_iso,
     """
     # shape of processed TPFM slices
     in_chunk_shape, in_chunk_shape_um = \
-        compute_chunk_shape(volume_shape, volume_item_size, px_size=px_size,
-                            max_slice_size=max_slice_size)
+        compute_chunk_shape(volume_shape, volume_item_size, px_size=px_size, max_slice_size=max_slice_size)                            
 
     # adjust shapes according to the anisotropy correction
     px_rsz_ratio = np.divide(px_size, px_size_iso)
-    out_chunk_shape = \
-        np.ceil(px_rsz_ratio * in_chunk_shape).astype(int)
+    out_chunk_shape = np.ceil(px_rsz_ratio * in_chunk_shape).astype(int)        
     out_volume_shape = np.ceil(px_rsz_ratio * volume_shape).astype(int)
 
     # compute input patch padding range (border artifacts suppression)
     pad = compute_smoothing_pad_range(smooth_sigma)
 
-    return in_chunk_shape, in_chunk_shape_um, \
-        out_chunk_shape, out_volume_shape, \
-        px_rsz_ratio, pad
+    return in_chunk_shape, in_chunk_shape_um, out_chunk_shape, out_volume_shape, px_rsz_ratio, pad       
 
 
-def configure_odf_slicing(vec_volume_shape, vec_item_size, px_size_iso,
-                          odf_scale_um, max_slice_size=100.0):
+def config_odf_slicing(vec_volume_shape, vec_item_size, px_size_iso, odf_scale_um, max_slice_size=100.0):                          
     """
     Description.
 
@@ -99,8 +93,7 @@ def configure_odf_slicing(vec_volume_shape, vec_item_size, px_size_iso,
     """
     # shape of processed TPFM slices
     vec_patch_shape, _ = \
-        compute_chunk_shape(vec_volume_shape, vec_item_size,
-                            px_size=px_size_iso, max_slice_size=max_slice_size)
+        compute_chunk_shape(vec_volume_shape, vec_item_size, px_size=px_size_iso, max_slice_size=max_slice_size)
 
     # derive the ODF map shape from the ODF kernel size
     odf_scale = int(np.ceil(odf_scale_um / px_size_iso[0]))
@@ -110,14 +103,12 @@ def configure_odf_slicing(vec_volume_shape, vec_item_size, px_size_iso,
     vec_patch_shape[2] = vec_patch_shape[1]
 
     # get output ODF chunk shape (X,Y,Z)
-    odf_patch_shape \
-        = np.ceil(np.divide(vec_patch_shape, odf_scale)).astype(int)
+    odf_patch_shape = np.ceil(np.divide(vec_patch_shape, odf_scale)).astype(int)        
 
     return vec_patch_shape, odf_patch_shape, odf_scale
 
 
-def compute_chunk_range(z, y, x, chunk_shape, volume_shape, pad_rng=0,
-                        flip=False):
+def compute_chunk_range(z, y, x, chunk_shape, volume_shape, pad_rng=0, flip=False):
     """
     Compute basic patch coordinates from microscopy image volume.
 
@@ -155,18 +146,9 @@ def compute_chunk_range(z, y, x, chunk_shape, volume_shape, pad_rng=0,
     # adjust original image patch coordinates
     # and generate padding range matrix
     pad_mat = np.zeros(shape=(3, 2), dtype=np.uint8)
-
-    z_start, z_stop, pad_mat[0, :] \
-        = adjust_chunk_coord(z, pad_rng, chunk_shape, volume_shape,
-                             axis=0, flip=flip)
-
-    y_start, y_stop, pad_mat[1, :] \
-        = adjust_chunk_coord(y, pad_rng, chunk_shape, volume_shape,
-                             axis=1, flip=flip)
-
-    x_start, x_stop, pad_mat[2, :] \
-        = adjust_chunk_coord(x, pad_rng, chunk_shape, volume_shape,
-                             axis=2, flip=flip)
+    z_start, z_stop, pad_mat[0, :] = adjust_chunk_coord(z, pad_rng, chunk_shape, volume_shape, axis=0, flip=flip)        
+    y_start, y_stop, pad_mat[1, :] = adjust_chunk_coord(y, pad_rng, chunk_shape, volume_shape, axis=1, flip=flip)                            
+    x_start, x_stop, pad_mat[2, :] = adjust_chunk_coord(x, pad_rng, chunk_shape, volume_shape, axis=2, flip=flip)                            
 
     # generate index ranges
     z_rng = slice(z_start, z_stop, 1)
@@ -178,8 +160,7 @@ def compute_chunk_range(z, y, x, chunk_shape, volume_shape, pad_rng=0,
     return rng, pad_mat
 
 
-def adjust_chunk_coord(axis_iter, pad_rng, chunk_shape, volume_shape, axis,
-                       flip=False):
+def adjust_chunk_coord(axis_iter, pad_rng, chunk_shape, volume_shape, axis, flip=False):
     """
     Adjust sliced image patch coordinates at volume boundaries.
 
@@ -218,8 +199,8 @@ def adjust_chunk_coord(axis_iter, pad_rng, chunk_shape, volume_shape, axis,
     axis_pad_array = np.zeros(shape=(2,), dtype=np.uint8)
 
     # compute start and stop coordinates
-    start = axis_iter*chunk_shape[axis] - pad_rng
-    stop = axis_iter*chunk_shape[axis] + chunk_shape[axis] + pad_rng
+    start = axis_iter * chunk_shape[axis] - pad_rng
+    stop = axis_iter * chunk_shape[axis] + chunk_shape[axis] + pad_rng
 
     # flip coordinates
     if flip:
@@ -242,8 +223,7 @@ def adjust_chunk_coord(axis_iter, pad_rng, chunk_shape, volume_shape, axis,
     return start, stop, axis_pad_array
 
 
-def compute_chunk_shape(volume_shape, volume_item_size, px_size=None,
-                        max_slice_size=100):
+def compute_chunk_shape(volume_shape, volume_item_size, px_size=None, max_slice_size=100):
     """
     Compute basic image chunk shape depending on its maximum size (in bytes).
 
@@ -271,8 +251,7 @@ def compute_chunk_shape(volume_shape, volume_item_size, px_size=None,
         (if px_size is provided)
     """
     chunk_depth = volume_shape[0]
-    chunk_side = np.round(1024*np.sqrt((max_slice_size /
-                                        (chunk_depth * volume_item_size))))
+    chunk_side = np.round(1024 * np.sqrt((max_slice_size / (chunk_depth * volume_item_size))))
     chunk_shape = np.array([chunk_depth, chunk_side, chunk_side]).astype(int)
     chunk_shape = np.min(np.stack((volume_shape[:3], chunk_shape)), axis=0)
 
@@ -303,8 +282,7 @@ def compute_smoothing_pad_range(smooth_sigma, truncate=4):
         patch padding range
     """
     if smooth_sigma is not None:
-        kernel_size = (np.ceil(2*truncate*smooth_sigma) // 2 * 2 + 1) \
-            .astype(int)
+        kernel_size = (np.ceil(2 * truncate * smooth_sigma) // 2 * 2 + 1).astype(int)            
         pad_rng = np.max(kernel_size)
     else:
         pad_rng = 0
@@ -346,7 +324,7 @@ def slice_channel(volume, rng, channel, mosaic=False):
 
 def crop_chunk(chunk, rng, flipped=()):
     """
-    Shrink patch at volume boundaries, for overall shape consistency.
+    Shrink image chunk at volume boundaries, for overall shape consistency.
 
     Parameters
     ----------
@@ -368,9 +346,7 @@ def crop_chunk(chunk, rng, flipped=()):
     out_chunk_shape = chunk.shape
     crop_rng = np.zeros(shape=(3,), dtype=int)
     for s in range(3):
-        crop_rng[s] = out_chunk_shape[s] - np.arange(rng[s].start,
-                                                     rng[s].stop,
-                                                     rng[s].step).size
+        crop_rng[s] = out_chunk_shape[s] - np.arange(rng[s].start, rng[s].stop, rng[s].step).size                                                     
 
     # crop patch if required
     if 0 in flipped:

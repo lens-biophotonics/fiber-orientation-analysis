@@ -8,20 +8,16 @@ from fiber_orientation.input import get_volume_info
 from fiber_orientation.odf import compute_scaled_odf, get_sph_harm_ncoeff
 from fiber_orientation.output import save_array
 from fiber_orientation.preprocessing import correct_tpfm_anisotropy
-from fiber_orientation.printing import (colored, print_analysis_time,
-                                        print_frangi_heading, print_masking_info,
-                                        print_odf_supervoxel, print_slice_progress,
-                                        print_slicing_info)
-from fiber_orientation.slicing import (compute_chunk_range, config_frangi_slicing,
-                                       configure_odf_slicing, crop_chunk, slice_channel)
-from fiber_orientation.utils import (create_background_mask, create_hdf5_file,
-                                     get_item_bytes, orient_colormap, transform_axes,
-                                     vector_colormap)
+from fiber_orientation.printing import (colored, print_analysis_time,print_frangi_heading, print_masking_info,
+                                        print_odf_supervoxel, print_slice_progress, print_slicing_info)
+from fiber_orientation.slicing import (compute_chunk_range, config_frangi_slicing, config_odf_slicing,
+                                       crop_chunk, slice_channel)
+from fiber_orientation.utils import (create_background_mask, create_hdf5_file, get_item_bytes,
+                                     orient_colormap, transform_axes, vector_colormap)
 
 
-def init_frangi_volumes(volume_shape, chunk_shape, resize_ratio,
-                        save_dir, volume_name, z_min=0, z_max=None,
-                        lpf_soma_mask=False):
+def init_frangi_volumes(volume_shape, chunk_shape, resize_ratio, save_dir, volume_name,
+                        z_min=0, z_max=None, lpf_soma_mask=False):
     """
     Initialize the output datasets of the Frangi filtering stage.
 
@@ -104,31 +100,23 @@ def init_frangi_volumes(volume_shape, chunk_shape, resize_ratio,
 
     # fiber channel
     iso_fiber_path = path.join(save_dir, 'iso_fiber_'+volume_name+'.h5')
-    iso_fiber_file, iso_fiber_volume \
-        = create_hdf5_file(iso_fiber_path, dset_shape,
-                           chunk_shape, dtype='uint8')
+    iso_fiber_file, iso_fiber_volume = create_hdf5_file(iso_fiber_path, dset_shape, chunk_shape, dtype='uint8')
     tmp_hdf5_list.append({'path': iso_fiber_path, 'obj': iso_fiber_file})
 
     frangi_path = path.join(save_dir, 'frangi_'+volume_name+'.h5')
-    frangi_file, frangi_volume \
-        = create_hdf5_file(frangi_path, dset_shape,
-                           chunk_shape, dtype='uint8')
+    frangi_file, frangi_volume = create_hdf5_file(frangi_path, dset_shape, chunk_shape, dtype='uint8')
     tmp_hdf5_list.append({'path': frangi_path, 'obj': frangi_file})
 
     fiber_mask_path = path.join(save_dir, 'fiber_msk_'+volume_name+'.h5')
-    fiber_mask_file, fiber_mask_volume \
-        = create_hdf5_file(fiber_mask_path, dset_shape,
-                           chunk_shape, dtype='uint8')
+    fiber_mask_file, fiber_mask_volume = create_hdf5_file(fiber_mask_path, dset_shape, chunk_shape, dtype='uint8')
     tmp_hdf5_list.append({'path': fiber_mask_path, 'obj': fiber_mask_file})
 
     # neuron channel
     if lpf_soma_mask:
         neuron_mask_path = path.join(save_dir, 'neuron_msk_'+volume_name+'.h5')
         neuron_mask_file, neuron_mask_volume \
-            = create_hdf5_file(neuron_mask_path, dset_shape,
-                               chunk_shape, dtype='uint8')
-        tmp_hdf5_list.append({'path': neuron_mask_path,
-                              'obj': neuron_mask_file})
+            = create_hdf5_file(neuron_mask_path, dset_shape, chunk_shape, dtype='uint8')
+        tmp_hdf5_list.append({'path': neuron_mask_path, 'obj': neuron_mask_file})
     else:
         neuron_mask_volume = None
 
@@ -137,28 +125,19 @@ def init_frangi_volumes(volume_shape, chunk_shape, resize_ratio,
     vec_chunk_shape = tuple(list(chunk_shape) + [volume_dims])
 
     eigenvec_path = path.join(save_dir, 'evi_'+volume_name+'.h5')
-    _, eigenvec_volume \
-        = create_hdf5_file(eigenvec_path, vec_dset_shape,
-                           vec_chunk_shape, dtype='float32')
-
+    _, eigenvec_volume = create_hdf5_file(eigenvec_path, vec_dset_shape, vec_chunk_shape, dtype='float32')
+        
     orientcol_path = path.join(save_dir, 'cmap_'+volume_name+'.h5')
-    orientcol_file, orientcol_volume \
-        = create_hdf5_file(orientcol_path, vec_dset_shape,
-                           vec_chunk_shape, dtype='uint8')
+    orientcol_file, orientcol_volume = create_hdf5_file(orientcol_path, vec_dset_shape, vec_chunk_shape, dtype='uint8')
     tmp_hdf5_list.append({'path': orientcol_path, 'obj': orientcol_file})
 
-    return eigenvec_volume, orientcol_volume, frangi_volume, \
-        fiber_mask_volume, iso_fiber_volume, neuron_mask_volume, \
-        zsel, tmp_hdf5_list
+    return eigenvec_volume, orientcol_volume, frangi_volume, fiber_mask_volume, iso_fiber_volume, \
+        neuron_mask_volume, zsel, tmp_hdf5_list
 
 
-def iterate_frangi_on_slices(volume, px_size, px_size_iso,
-                             smooth_sigma, save_dir, volume_name,
-                             max_slice_size=100.0,
-                             scales_um=1.25, ch_neuron=0, ch_fiber=1,
-                             alpha=0.05, beta=1, gamma=100, dark_fibers=False,
-                             z_min=0, z_max=None, orient_cmap=False,
-                             lpf_soma_mask=False, skeletonize=False,
+def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_dir, volume_name, max_slice_size=100.0,
+                             scales_um=1.25, ch_neuron=0, ch_fiber=1, alpha=0.05, beta=1, gamma=100, dark_fibers=False,
+                             z_min=0, z_max=None, orient_cmap=False, lpf_soma_mask=False, skeletonize=False,
                              mosaic=False, verbose=True):
     """
     Iteratively apply 3D Frangi filtering to basic TPFM image slices.
@@ -259,22 +238,18 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso,
         shape of the processed image patches [px]
     """
     # get info on the input TPFM image volume
-    volume_shape, volume_shape_um, volume_item_size \
-        = get_volume_info(volume, px_size, mosaic=mosaic)
+    volume_shape, volume_shape_um, volume_item_size = get_volume_info(volume, px_size, mosaic=mosaic)
 
     # get info on the processed TPFM slices
-    in_chunk_shape, in_chunk_shape_um, \
-        out_chunk_shape, out_volume_shape, px_rsz_ratio, pad \
-        = config_frangi_slicing(volume_shape, volume_item_size, px_size,
-                                px_size_iso, smooth_sigma,
+    in_chunk_shape, in_chunk_shape_um, out_chunk_shape, out_volume_shape, px_rsz_ratio, pad \
+        = config_frangi_slicing(volume_shape, volume_item_size, px_size, px_size_iso, smooth_sigma,
                                 max_slice_size=max_slice_size)
 
     # initialize the output volume arrays
     vec_volume, orientcol_volume, frangi_volume, fiber_mask_volume, \
         iso_fiber_volume, neuron_mask_volume, zsel, tmp_hdf5_list \
-        = init_frangi_volumes(volume_shape, out_chunk_shape, px_rsz_ratio,
-                              save_dir, volume_name, z_min=z_min, z_max=z_max,
-                              lpf_soma_mask=lpf_soma_mask)
+        = init_frangi_volumes(volume_shape, out_chunk_shape, px_rsz_ratio, save_dir, volume_name,
+                              z_min=z_min, z_max=z_max, lpf_soma_mask=lpf_soma_mask)
 
     # compute the Frangi filter's scale values in pixel
     sigma_px = config_frangi_scales(scales_um, px_size_iso[0])
@@ -285,8 +260,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso,
         print_frangi_heading(alpha, beta, gamma, scales_um)
 
         # print iterative analysis information
-        print_slicing_info(volume_shape_um, in_chunk_shape_um, px_size,
-                           volume_item_size)
+        print_slicing_info(volume_shape_um, in_chunk_shape_um, px_size, volume_item_size)
 
         # print neuron masking info
         print_masking_info(lpf_soma_mask)
@@ -307,37 +281,28 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso,
                     print_slice_progress(loop_count, tot=total_iter)
 
                 # index ranges of the analyzed fiber patch (with padding)
-                rng_in, pad_mat = \
-                    compute_chunk_range(z, y, x, in_chunk_shape, volume_shape,
-                                        pad_rng=pad)
+                rng_in, pad_mat = compute_chunk_range(z, y, x, in_chunk_shape, volume_shape, pad_rng=pad)
 
                 # output index ranges
-                rng_out, _ = \
-                    compute_chunk_range(z, y, x,
-                                        out_chunk_shape, out_volume_shape)
+                rng_out, _ = compute_chunk_range(z, y, x, out_chunk_shape, out_volume_shape)
 
                 # slice fiber image patch
-                fiber_mask = \
-                    slice_channel(volume, rng_in,
-                                  channel=ch_fiber, mosaic=mosaic)
+                fiber_mask = slice_channel(volume, rng_in, channel=ch_fiber, mosaic=mosaic)
 
                 # skip background patch
                 if np.max(fiber_mask) != 0:
 
                     # preprocess fiber patch
-                    iso_fiber_patch = \
-                        correct_tpfm_anisotropy(fiber_mask, px_rsz_ratio,
-                                                sigma=smooth_sigma,
-                                                pad_mat=pad_mat)
+                    iso_fiber_patch = correct_tpfm_anisotropy(fiber_mask, px_rsz_ratio,
+                                                              sigma=smooth_sigma, pad_mat=pad_mat)
 
                     # crop isotropized fiber patch
                     iso_fiber_patch = crop_chunk(iso_fiber_patch, rng_out)
 
                     # 3D Frangi filtering
-                    frangi_patch, vec_patch = \
-                        frangi_filter(iso_fiber_patch, sigma_px=sigma_px,
-                                      alpha=alpha, beta=beta, gamma=gamma,
-                                      dark_fibers=dark_fibers)
+                    frangi_patch, vec_patch \
+                        = frangi_filter(iso_fiber_patch, sigma_px=sigma_px,
+                                        alpha=alpha, beta=beta, gamma=gamma, dark_fibers=dark_fibers)
 
                     # generate RGB orientation color map
                     if orient_cmap:
@@ -347,55 +312,39 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso,
 
                     # mask background
                     vec_patch, orientcol_patch, fiber_mask = \
-                        mask_background(frangi_patch,
-                                        vec_patch, orientcol_patch,
-                                        thresh_method='li',
-                                        skeletonize=skeletonize,
-                                        invert_mask=False)
+                        mask_background(frangi_patch, vec_patch, orientcol_patch, thresh_method='li',
+                                        skeletonize=skeletonize, invert_mask=False)
 
                     # (optional) neuronal body masking
                     if lpf_soma_mask:
 
                         # neuron patch index ranges (without padding)
-                        rng_in, _ = \
-                            compute_chunk_range(z, y, x, in_chunk_shape,
-                                                volume_shape)
+                        rng_in, _ = compute_chunk_range(z, y, x, in_chunk_shape, volume_shape)                                               
 
                         # slice neuron image patch
-                        neuron_patch = \
-                            slice_channel(volume, rng_in,
-                                          channel=ch_neuron, mosaic=mosaic)
+                        neuron_patch = slice_channel(volume, rng_in, channel=ch_neuron, mosaic=mosaic)
 
                         # resize neuron patch (lateral downsampling)
-                        iso_neuron_patch = \
-                            correct_tpfm_anisotropy(neuron_patch, px_rsz_ratio)
+                        iso_neuron_patch = correct_tpfm_anisotropy(neuron_patch, px_rsz_ratio)
 
                         # crop isotropized neuron patch
-                        iso_neuron_patch = \
-                            crop_chunk(iso_neuron_patch, rng_out)
+                        iso_neuron_patch = crop_chunk(iso_neuron_patch, rng_out)
 
                         # mask neuronal bodies
                         vec_patch, orientcol_patch, neuron_mask = \
-                            mask_background(iso_neuron_patch,
-                                            vec_patch, orientcol_patch,
-                                            thresh_method='yen',
-                                            skeletonize=False,
-                                            invert_mask=True)
+                            mask_background(iso_neuron_patch, vec_patch, orientcol_patch, thresh_method='yen',
+                                            skeletonize=False, invert_mask=True)
 
                         # fill neuron mask
-                        neuron_mask_volume[rng_out] \
-                            = (255*neuron_mask[zsel, ...]).astype(np.uint8)
+                        neuron_mask_volume[rng_out] = (255*neuron_mask[zsel, ...]).astype(np.uint8)
 
                     # fill output volumes
                     vec_rng_out = tuple(np.append(rng_out, slice(0, 3, 1)))
                     vec_volume[vec_rng_out] = vec_patch[zsel, ...]
                     orientcol_volume[vec_rng_out] = orientcol_patch[zsel, ...]
-                    iso_fiber_volume[rng_out] \
-                        = iso_fiber_patch[zsel, ...].astype(np.uint8)
-                    frangi_volume[rng_out] \
-                        = (255*frangi_patch[zsel, ...]).astype(np.uint8)
-                    fiber_mask_volume[rng_out] \
-                        = (255*(1-fiber_mask[zsel, ...])).astype(np.uint8)
+                    iso_fiber_volume[rng_out] = iso_fiber_patch[zsel, ...].astype(np.uint8)
+                    frangi_volume[rng_out] = (255*frangi_patch[zsel, ...]).astype(np.uint8)
+                    fiber_mask_volume[rng_out] = (255*(1-fiber_mask[zsel, ...])).astype(np.uint8)
 
                 # increase loop counter
                 loop_count += 1
@@ -445,22 +394,18 @@ def init_odf_volumes(vec_volume_shape, save_dir, odf_degrees=6, odf_scale=15):
         mkdir(save_dir)
 
     # initialize downsampled background image dataset (HDF5 file)
-    bg_shape \
-        = np.flip(np.ceil(np.divide(vec_volume_shape, odf_scale))).astype(int)
+    bg_shape = np.flip(np.ceil(np.divide(vec_volume_shape, odf_scale))).astype(int)
 
     bg_tmp_path = path.join(save_dir, 'bg_tmp{}.h5'.format(odf_scale))
     bg_tmp_file, bg_mrtrix_volume \
-        = create_hdf5_file(bg_tmp_path, bg_shape,
-                           tuple(np.append(bg_shape[:2], 1)), dtype='uint8')
+        = create_hdf5_file(bg_tmp_path, bg_shape, tuple(np.append(bg_shape[:2], 1)), dtype='uint8')                           
     bg_tmp_dict = {'path': bg_tmp_path, 'obj': bg_tmp_file}
 
     # initialize ODF dataset
     num_coeff = get_sph_harm_ncoeff(odf_degrees)
     odf_shape = tuple(list(bg_shape) + [num_coeff])
     odf_tmp_path = path.join(save_dir, 'odf_tmp{}.h5'.format(odf_scale))
-    odf_tmp_file, odf_volume \
-        = create_hdf5_file(odf_tmp_path, odf_shape,
-                           (1, 1, 1, num_coeff), dtype='float32')
+    odf_tmp_file, odf_volume = create_hdf5_file(odf_tmp_path, odf_shape, (1, 1, 1, num_coeff), dtype='float32')
     odf_tmp_dict = {'path': odf_tmp_path, 'obj': odf_tmp_file}
 
     # create list of dictionaries of temporary HDF5 files (object and path)
@@ -469,8 +414,7 @@ def init_odf_volumes(vec_volume_shape, save_dir, odf_degrees=6, odf_scale=15):
     return odf_volume, bg_mrtrix_volume, odf_tmp_files, odf_shape
 
 
-def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
-                          save_dir, max_slice_size=100.0, tmp_files=[],
+def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso, save_dir, max_slice_size=100.0, tmp_files=[],
                           odf_scale_um=15, odf_degrees=6, verbose=True):
     """
     Iteratively estimate 3D fiber ODFs over basic orientation data chunks.
@@ -522,23 +466,19 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
 
     # configure image slicing for ODF analysis
     vec_patch_shape, odf_patch_shape, odf_scale \
-        = configure_odf_slicing(vec_volume_shape, vec_item_size, px_size_iso,
-                                odf_scale_um=odf_scale_um,
-                                max_slice_size=max_slice_size)
+        = config_odf_slicing(vec_volume_shape, vec_item_size, px_size_iso,
+                             odf_scale_um=odf_scale_um, max_slice_size=max_slice_size)
 
     # print ODF super-voxel size
     print_odf_supervoxel(vec_patch_shape, px_size_iso, odf_scale_um)
 
     # initialize ODF analysis output volumes
     odf_volume, bg_mrtrix_volume, odf_tmp_files, odf_volume_shape \
-        = init_odf_volumes(vec_volume_shape, save_dir,
-                           odf_degrees=odf_degrees,
-                           odf_scale=odf_scale)
+        = init_odf_volumes(vec_volume_shape, save_dir, odf_degrees=odf_degrees, odf_scale=odf_scale)
     tmp_files = tmp_files + odf_tmp_files
 
     # iteratively apply Frangi filtering to basic TPFM slices
-    loop_range \
-        = np.ceil(np.divide(vec_volume_shape, vec_patch_shape)).astype(int)
+    loop_range = np.ceil(np.divide(vec_volume_shape, vec_patch_shape)).astype(int)
     total_iter = np.prod(loop_range)
     loop_count = 1
     tic = perf_counter()
@@ -553,14 +493,10 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
                     print_slice_progress(loop_count, tot=total_iter)
 
                 # input index ranges
-                rng_in, _ = \
-                    compute_chunk_range(z, y, x, vec_patch_shape,
-                                        vec_volume_shape)
+                rng_in, _ = compute_chunk_range(z, y, x, vec_patch_shape, vec_volume_shape)
 
                 # ODF index ranges
-                rng_odf, _ = \
-                    compute_chunk_range(x, y, z, np.flip(odf_patch_shape),
-                                        odf_volume_shape, flip=True)
+                rng_odf, _ = compute_chunk_range(x, y, z, np.flip(odf_patch_shape), odf_volume_shape, flip=True)                                        
 
                 # load dataset chunks to NumPy arrays, transform axes
                 if iso_fiber_dset is None:
@@ -572,27 +508,19 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
 
                 # ODF analysis
                 odf_chunk, bg_mrtrix_chunk, \
-                    = compute_scaled_odf(odf_scale, vec_chunk, iso_fiber_chunk,
-                                         odf_patch_shape, degrees=odf_degrees)
+                    = compute_scaled_odf(odf_scale, vec_chunk, iso_fiber_chunk, odf_patch_shape, degrees=odf_degrees)
 
                 # transform axes
-                odf_chunk = transform_axes(odf_chunk,
-                                           swapped=(0, 2),
-                                           flipped=(0, 1, 2))
-                bg_mrtrix_chunk = transform_axes(bg_mrtrix_chunk,
-                                                 swapped=(0, 2),
-                                                 flipped=(0, 1, 2))
+                odf_chunk = transform_axes(odf_chunk, swapped=(0, 2), flipped=(0, 1, 2))
+                bg_mrtrix_chunk = transform_axes(bg_mrtrix_chunk, swapped=(0, 2), flipped=(0, 1, 2))
 
                 # crop output chunks
-                odf_chunk = crop_chunk(odf_chunk, rng_odf,
-                                       flipped=(0, 1, 2))
-                bg_mrtrix_chunk = crop_chunk(bg_mrtrix_chunk, rng_odf,
-                                             flipped=(0, 1, 2))
+                odf_chunk = crop_chunk(odf_chunk, rng_odf, flipped=(0, 1, 2))
+                bg_mrtrix_chunk = crop_chunk(bg_mrtrix_chunk, rng_odf, flipped=(0, 1, 2))
 
                 # fill datasets
                 bg_mrtrix_volume[rng_odf] = bg_mrtrix_chunk
-                rng_odf = tuple(np.append(rng_odf,
-                                          slice(0, odf_chunk.shape[-1], 1)))
+                rng_odf = tuple(np.append(rng_odf, slice(0, odf_chunk.shape[-1], 1)))
                 odf_volume[rng_odf] = odf_chunk
 
                 # increase loop counter
@@ -605,8 +533,7 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso,
     return odf_volume, bg_mrtrix_volume, tmp_files
 
 
-def mask_background(image, vec_patch, orientcol_patch,
-                    thresh_method='yen', skeletonize=False, invert_mask=False):
+def mask_background(image, vec_patch, orientcol_patch, thresh_method='yen', skeletonize=False, invert_mask=False):
     """
     Mask orientation volume arrays.
 
@@ -642,9 +569,7 @@ def mask_background(image, vec_patch, orientcol_patch,
         background mask
     """
     # generate background mask
-    background = create_background_mask(image,
-                                        thresh_method=thresh_method,
-                                        skeletonize=skeletonize)
+    background = create_background_mask(image, thresh_method=thresh_method, skeletonize=skeletonize)
 
     # invert mask
     if invert_mask:
@@ -657,8 +582,7 @@ def mask_background(image, vec_patch, orientcol_patch,
     return vec_patch, orientcol_patch, background
 
 
-def save_frangi_volumes(vec_volume, vec_colmap, frangi_volume,
-                        fiber_mask, neuron_mask, save_dir, volume_name):
+def save_frangi_volumes(vec_volume, vec_colmap, frangi_volume, fiber_mask, neuron_mask, save_dir, volume_name):
     """
     Save the output arrays of the Frangi filtering stage to TIF files.
 
@@ -715,8 +639,7 @@ def save_frangi_volumes(vec_volume, vec_colmap, frangi_volume,
         save_array('neuron_mask_'+volume_name, save_dir, neuron_mask)
 
 
-def save_odf_volumes(odf_list, bg_mrtrix_list,
-                     save_dir, volume_name, odf_scales_um):
+def save_odf_volumes(odf_list, bg_mrtrix_list, save_dir, volume_name, odf_scales_um):
     """
     Save the output arrays of the ODF analysis stage to TIF and Nifti files.\n
     NOTE: arrays tagged with 'mrtrixview' are preliminarily transformed
@@ -764,7 +687,5 @@ def save_odf_volumes(odf_list, bg_mrtrix_list,
 
     # odf analysis volumes to Nifti files (adjusted view for Mrtrix3)
     for (odf, bg, s) in zip(odf_list, bg_mrtrix_list, odf_scales_um):
-        save_array(f'bg_mrtrixview_{s}_'+volume_name,
-                   save_dir, bg, format='nii')
-        save_array(f'odf_mrtrixview_{s}_'+volume_name,
-                   save_dir, odf, format='nii')
+        save_array(f'bg_mrtrixview_{s}_'+volume_name, save_dir, bg, format='nii')
+        save_array(f'odf_mrtrixview_{s}_'+volume_name, save_dir, odf, format='nii')

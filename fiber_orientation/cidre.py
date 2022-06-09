@@ -34,14 +34,11 @@ def print_cidre_heading(cidre_mode):
         hdr_str += '  Mode:       dynamic range corrected\n'
     elif cidre_mode == CIDRE.DIRECT:
         hdr_str += '  Mode:       direct\n'
-    hdr_str += '  Objective:  Zeiss' + \
-               '\n  Emission \u03BB: 618nm (red)' + \
-               '\n              482nm (green)\n'
+    hdr_str += '  Objective:  Zeiss\n  Emission \u03BB: 618nm (red)\n              482nm (green)\n'               
     print(hdr_str)
 
 
-def load_cidre_models(cidre_path, model_shape=(512, 512, 3),
-                      channels=['red', 'green', 'blue']):
+def load_cidre_models(cidre_path, model_shape=(512, 512, 3), channels=['red', 'green', 'blue']):
     """
     Load the spatial models of the gain (v) and additive noise (z) terms of the
     input microscopy images, identified via the CIDRE method
@@ -123,18 +120,16 @@ def resize_cidre_models(v, z, slice_shape):
 
         # resize models, looping over channels
         for c in range(slice_shape[-1]):
-            v_res[..., c] = resize(v[..., c], slice_shape[:-1],
-                                   anti_aliasing=True, preserve_range=True)
-            z_res[..., c] = resize(z[..., c], slice_shape[:-1],
-                                   anti_aliasing=True, preserve_range=True)
+            v_res[..., c] = resize(v[..., c], slice_shape[:-1], anti_aliasing=True, preserve_range=True)                                  
+            z_res[..., c] = resize(z[..., c], slice_shape[:-1], anti_aliasing=True, preserve_range=True)
+
         return v_res, z_res
 
     else:
         return v, z
 
 
-def apply_cidre_models(slice_rgb, v, z, v_mean, z_mean,
-                       cidre_mode=CIDRE.ZERO_PRESERVED, pro_type=np.float64):
+def apply_cidre_models(slice_rgb, v, z, v_mean, z_mean, cidre_mode=CIDRE.ZERO_PRESERVED, pro_type=np.float64):
     """
     Apply CIDRE illumination correction to 2D RGB slice.
 
@@ -176,29 +171,24 @@ def apply_cidre_models(slice_rgb, v, z, v_mean, z_mean,
     if cidre_mode == CIDRE.ZERO_PRESERVED:
         for c in range(3):
             if v_mean[c] != np.nan:
-                corr_slice[..., c] = z_mean[c] + v_mean[c] * \
-                    (np.divide(slice_rgb[..., c] - z[..., c], v[..., c]))
+                corr_slice[..., c] = z_mean[c] + v_mean[c] * (np.divide(slice_rgb[..., c] - z[..., c], v[..., c]))
 
     # dynamic range corrected
     elif cidre_mode == CIDRE.RANGE_CORRECTED:
         for c in range(3):
             if v_mean[c] != np.nan:
-                corr_slice[..., c] = v_mean[c] * \
-                    (np.divide(slice_rgb[..., c] - z[..., c], v[..., c]))
+                corr_slice[..., c] = v_mean[c] * (np.divide(slice_rgb[..., c] - z[..., c], v[..., c]))
 
     # direct correction
     elif cidre_mode == CIDRE.DIRECT:
         for c in range(3):
             if v_mean[c] != np.nan:
-                corr_slice[..., c] = \
-                    np.divide(slice_rgb[..., c] - z[..., c], v[..., c])
+                corr_slice[..., c] = np.divide(slice_rgb[..., c] - z[..., c], v[..., c])
 
     return corr_slice
 
 
-def correct_illumination(source,
-                         models='/mnt/NASone/michele/fiberSor/cidre',
-                         mosaic=False, mode=CIDRE.ZERO_PRESERVED):
+def correct_illumination(source, models='/mnt/NASone/michele/fiberSor/cidre', mosaic=False, mode=CIDRE.ZERO_PRESERVED):
     """
     Correct the uneven illumination of the input TPFM image stacks,
     using the CIDRE illumination-correction method (Smith et al. 2014).
@@ -232,8 +222,7 @@ def correct_illumination(source,
 
     # create sub-folder where storing the original stacks
     zstack_dir = path.dirname(source)
-    cidre_out_dir = path.join(zstack_dir,
-                              'cidre_corrected_mode'+str(mode))
+    cidre_out_dir = path.join(zstack_dir, 'cidre_corrected_mode'+str(mode))
 
     # get new CIDRE-corrected source path
     corr_source = path.join(cidre_out_dir, path.basename(source))
@@ -273,8 +262,7 @@ def correct_illumination(source,
 
             # print progress
             prc_progress = 100 * (loop_count / Ns)
-            print('  correcting stack {0}/{1}: {2:0.1f}%'
-                  .format(loop_count, Ns, prc_progress), end='\r')
+            print('  correcting stack {0}/{1}: {2:0.1f}%'.format(loop_count, Ns, prc_progress), end='\r')                  
 
             # load z-stack
             volume_in = tiff.imread(s)
@@ -291,10 +279,8 @@ def correct_illumination(source,
 
                 # apply CIDRE correction
                 volume_out[d, ...] = \
-                    apply_cidre_models(volume_in[d, ...], v, z,
-                                       v_mean=v_mean, z_mean=z_mean,
-                                       cidre_mode=mode,
-                                       pro_type=np.float64)
+                    apply_cidre_models(volume_in[d, ...], v, z, v_mean=v_mean, z_mean=z_mean,
+                                       cidre_mode=mode, pro_type=np.float64)                                      
 
             # clip values
             volume_out = np.where(volume_out >= 0, volume_out, 0)
@@ -304,8 +290,7 @@ def correct_illumination(source,
             volume_out = volume_out.astype(volume_dtype)
 
             # overwrite volume
-            tiff.imwrite(path.join(cidre_out_dir, path.basename(s)),
-                         volume_out)
+            tiff.imwrite(path.join(cidre_out_dir, path.basename(s)), volume_out)                         
 
             # clear input stack from memory
             clear_from_memory(volume_in)

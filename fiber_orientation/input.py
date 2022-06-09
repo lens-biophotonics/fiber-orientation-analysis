@@ -10,13 +10,11 @@ from zetastitcher import VirtualFusedVolume
 from fiber_orientation.cidre import correct_illumination
 from fiber_orientation.output import create_save_dir
 from fiber_orientation.preprocessing import config_anisotropy_correction
-from fiber_orientation.printing import (colored, print_import_time,
-                                        print_resolution, print_volume_shape)
+from fiber_orientation.printing import (colored, print_import_time, print_resolution, print_volume_shape)                                        
 from fiber_orientation.utils import get_item_bytes
 
 
-class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
-                      argparse.RawTextHelpFormatter):
+class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):                      
     pass
 
 
@@ -80,8 +78,7 @@ def cli_parser():
     cli_parser.add_argument('--z-max', type=int, default=None, help='forced maximum output z-depth')
     cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the ODF super-voxels [μm]')
     cli_parser.add_argument('--odf-deg', type=int, default=6,
-                            help='degrees of the spherical harmonics series expansion '
-                                 '(even number between 2 and 10)')
+                            help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
 
     # parse arguments
     cli_args = cli_parser.parse_args()
@@ -153,8 +150,7 @@ def load_input_volume(cli_args):
         cidre_path = cli_args.cidre_path
         cidre_mode = cli_args.cidre_mode
         if cidre_path:
-            volume_path = correct_illumination(volume_path, models=cidre_path,
-                                               mosaic=mosaic, mode=cidre_mode)
+            volume_path = correct_illumination(volume_path, models=cidre_path, mosaic=mosaic, mode=cidre_mode)                                               
 
         # load TPFM tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
@@ -318,9 +314,8 @@ def load_pipeline_config(args):
     # create saving directory
     save_dir = create_save_dir(volume_path)
 
-    return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, \
-        odf_scales_um, odf_degrees, z_min, z_max, ch_neuron, ch_fiber, \
-        max_slice_size, lpf_soma_mask, save_dir, volume_name
+    return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
+        z_min, z_max, ch_neuron, ch_fiber, max_slice_size, lpf_soma_mask, save_dir, volume_name
 
 
 def load_microscope_config(args):
