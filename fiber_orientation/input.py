@@ -71,7 +71,7 @@ def cli_parser():
     cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]\n')
     cli_parser.add_argument('--cidre-path', '--cp', type=str,
                             help='path to CIDRE correction models (see fiber_orientation.cidre correct_illumination)')
-    cli_parser.add_argument('--cidre-mode', '--cm', type=int,
+    cli_parser.add_argument('--cidre-mode', '--cm', type=int, default=0,
                             help='CIDRE illumination correction '
                                  '(options: 0, 1, 2; refer to fiber_orientation.cidre)')
     cli_parser.add_argument('--ch-fiber', type=int, default=1, help='myelinated fibers channel')
@@ -152,7 +152,7 @@ def load_input_volume(cli_args):
         # CIDRE illumination correction
         cidre_path = cli_args.cidre_path
         cidre_mode = cli_args.cidre_mode
-        if cidre_mode and cidre_path:
+        if cidre_path:
             volume_path = correct_illumination(volume_path, models=cidre_path,
                                                mosaic=mosaic, mode=cidre_mode)
 

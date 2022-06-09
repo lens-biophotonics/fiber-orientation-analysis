@@ -50,7 +50,7 @@ def load_cidre_models(cidre_path, model_shape=(512, 512, 3),
     Parameters
     ----------
     cidre_path:
-        path to the CIDRE models
+        path to the CIDRE correction models
 
     model_shape: tuple
         model array shape (default: (512, 512, 3))
@@ -83,7 +83,7 @@ def load_cidre_models(cidre_path, model_shape=(512, 512, 3),
         except Exception:
             v[..., c] = np.ones(model_shape[:-1])
             z[..., c] = np.zeros(model_shape[:-1])
-            corr_channels += '(skipping'+channels[c]+': models not found)'
+            corr_channels += '(skipping '+channels[c]+': models not found)'
         else:
             corr_channels += channels[c]+' '
     print(corr_channels+'\n')
