@@ -7,7 +7,7 @@ from foa3d.frangi import config_frangi_scales, frangi_filter
 from foa3d.input import get_volume_info
 from foa3d.odf import compute_scaled_odf, get_sph_harm_ncoeff
 from foa3d.output import save_array
-from foa3d.preprocessing import correct_tpfm_anisotropy
+from foa3d.preprocessing import correct_image_anisotropy
 from foa3d.printing import (colored, print_analysis_time, print_frangi_heading,
                             print_masking_info, print_odf_supervoxel,
                             print_slice_progress, print_slicing_info)
@@ -295,8 +295,8 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                 if np.max(fiber_mask) != 0:
 
                     # preprocess fiber patch
-                    iso_fiber_patch = correct_tpfm_anisotropy(fiber_mask, px_rsz_ratio,
-                                                              sigma=smooth_sigma, pad_mat=pad_mat)
+                    iso_fiber_patch = correct_image_anisotropy(fiber_mask, px_rsz_ratio,
+                                                               sigma=smooth_sigma, pad_mat=pad_mat)
 
                     # crop isotropized fiber patch
                     iso_fiber_patch = crop_chunk(iso_fiber_patch, rng_out)
@@ -327,7 +327,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                         neuron_patch = slice_channel(volume, rng_in, channel=ch_neuron, mosaic=mosaic)
 
                         # resize neuron patch (lateral downsampling)
-                        iso_neuron_patch = correct_tpfm_anisotropy(neuron_patch, px_rsz_ratio)
+                        iso_neuron_patch = correct_image_anisotropy(neuron_patch, px_rsz_ratio)
 
                         # crop isotropized neuron patch
                         iso_neuron_patch = crop_chunk(iso_neuron_patch, rng_out)

@@ -98,12 +98,12 @@ def print_odf_supervoxel(volume_shape, px_size_iso, odf_scale_um):
 
 def print_resolution(px_size, psf_fwhm):
     """
-    Print TPFM pixel and optical resolution.
+    Print pixel and optical resolution of the microscopy system.
 
     Parameters
     ----------
     px_size: ndarray (shape=(3,), dtype=float)
-        TPFM pixel size [μm]
+        pixel size [μm]
 
     psf_fwhm: ndarray (shape=(3,), dtype=float)
         PSF 3D FWHM in [μm]
@@ -112,9 +112,9 @@ def print_resolution(px_size, psf_fwhm):
     -------
     None
     """
-    print("  TPFM pixel size      [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+    print("  Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
           .format(px_size[0], px_size[1], px_size[2]))
-    print("  TPFM PSF FWHM        [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+    print("  PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
           .format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
@@ -152,7 +152,7 @@ def print_volume_shape(cli_args, volume, mosaic):
     volume_shape = np.delete(volume_shape, channel_axis)
 
     print("\n                                Z      Y      X")
-    print("  TPFM volume shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+    print("  Volume shape         [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(volume_shape[0] * px_size_z, volume_shape[1] * px_size_xy, volume_shape[2] * px_size_xy))
 
 

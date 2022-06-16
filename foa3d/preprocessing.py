@@ -9,7 +9,7 @@ from foa3d.utils import fwhm_to_sigma
 def config_anisotropy_correction(px_size, psf_fwhm):
     """
     Confocal laser scanning microscopes and light-sheet microscopes provide
-    3D data with a lower resolution along the optical axis direction
+    3D fluorescence data with a lower resolution along the optical axis
     (i.e. the z-axis).
     However, the longitudinal PSF anisotropy introduces a strong bias
     in the estimated 3D orientations [Morawski et al. 2018].
@@ -39,7 +39,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         new isotropic spatial sampling [μm]
     """
     # get preprocessing stage configuration (resolution anisotropy correction)
-    print(colored(0, 191, 255, "\n\n  TPFM Volume Preprocessing"), end='\r')
+    print(colored(0, 191, 255, "\n\n  Microscopy Image Volume Preprocessing"), end='\r')
 
     # set the isotropic pixel resolution equal to the z sampling step
     px_size_iso = px_size[0] * np.ones(shape=(3,))
@@ -82,8 +82,8 @@ def config_anisotropy_correction(px_size, psf_fwhm):
     return smooth_sigma, px_size_iso
 
 
-def correct_tpfm_anisotropy(volume, resize_ratio,
-                            sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
+def correct_image_anisotropy(volume, resize_ratio,
+                             sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
     """
     Smooth the input image volume along the lateral XY axes so that the lateral
     size of the PSF becomes equal to the PSF's depth.
@@ -116,7 +116,7 @@ def correct_tpfm_anisotropy(volume, resize_ratio,
     Returns
     -------
     iso_volume: ndarray (shape=(Z,Y,X))
-        isotropic TPFM image volume
+        isotropic microscopy image volume
     """
     # no resizing
     if np.all(resize_ratio == 1):

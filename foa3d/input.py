@@ -45,7 +45,7 @@ def cli_parser():
                     'Medical Image Analysis, 65, pp. 101760.\n\n',
         formatter_class=CustomFormatter)
     cli_parser.add_argument(dest='volume_path',
-                            help='path to input data volume\n'
+                            help='path to input microscopy image volume\n'
                                  '* supported formats: .tif, .npy, .yml (ZetaStitcher stitch file), '
                                  '.h5 (4D dataset of fiber vectors)\n'
                                  '* image  axes order: (Z, Y, X)\n'
@@ -88,7 +88,7 @@ def cli_parser():
 
 def load_input_volume(cli_args):
     """
-    Load TPFM volume from TIFF, NumPy or ZetaStitcher .yml file.
+    Load microscopy volume from TIFF, NumPy or ZetaStitcher .yml file.
     Apply CIDRE-based illumination correction if required.
     Alternatively, the processing pipeline accepts .h5 datasets of
     fiber orientation vectors as input: in this case, the
@@ -105,13 +105,13 @@ def load_input_volume(cli_args):
             (shape=(Z,C,Y,X) for .yml stitch files,
              shape=(Z,Y,X,3) for .h5 datasets,
              shape=(Z,Y,X,C) otherwise)
-        TPFM image volume or fiber orientation vector dataset
+        microscopy image volume or fiber orientation vector dataset
 
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
     """
     # print heading
-    print(colored(0, 191, 255, "\n  Volume Import\n"))
+    print(colored(0, 191, 255, "\n  Microscopy Image Volume Import\n"))
 
     # retrieve volume path and name
     volume_path = cli_args.volume_path
@@ -320,7 +320,7 @@ def load_pipeline_config(args):
 
 def load_microscope_config(args):
     """
-    Retrieve TPFM microscope parameters from command line.
+    Retrieve microscope parameters from command line.
 
     Parameters
     ----------
