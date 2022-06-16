@@ -7,14 +7,14 @@ import tifffile as tiff
 from h5py import File
 from zetastitcher import VirtualFusedVolume
 
-from fiber_orientation.cidre import correct_illumination
-from fiber_orientation.output import create_save_dir
-from fiber_orientation.preprocessing import config_anisotropy_correction
-from fiber_orientation.printing import (colored, print_import_time, print_resolution, print_volume_shape)                                        
-from fiber_orientation.utils import get_item_bytes
+from foa3d.cidre import correct_illumination
+from foa3d.output import create_save_dir
+from foa3d.preprocessing import config_anisotropy_correction
+from foa3d.printing import (colored, print_import_time, print_resolution, print_volume_shape)
+from foa3d.utils import get_item_bytes
 
 
-class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):                      
+class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
     pass
 
 

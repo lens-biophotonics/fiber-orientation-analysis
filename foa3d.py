@@ -1,11 +1,11 @@
-from fiber_orientation.input import (cli_parser, load_input_volume, load_pipeline_config)                                     
-from fiber_orientation.pipeline import (iterate_frangi_on_slices, iterate_odf_on_slices,
-                                        save_frangi_volumes, save_odf_volumes)
-from fiber_orientation.printing import (print_odf_heading, print_pipeline_heading)                                        
-from fiber_orientation.utils import delete_tmp_files
+from foa3d.input import cli_parser, load_input_volume, load_pipeline_config
+from foa3d.pipeline import (iterate_frangi_on_slices, iterate_odf_on_slices,
+                            save_frangi_volumes, save_odf_volumes)
+from foa3d.printing import print_odf_heading, print_pipeline_heading
+from foa3d.utils import delete_tmp_files
 
 
-def fiberSor(cli_args):
+def foa3d(cli_args):
 
     # load image volume or dataset of fiber orientation vectors
     volume, mosaic, skip_frangi = load_input_volume(cli_args)        
@@ -56,6 +56,6 @@ def fiberSor(cli_args):
 
 if __name__ == '__main__':
 
-    # start fiberSor pipeline by terminal
+    # start Foa3D pipeline by terminal
     print_pipeline_heading()
-    fiberSor(cli_args=cli_parser())
+    foa3d(cli_args=cli_parser())
