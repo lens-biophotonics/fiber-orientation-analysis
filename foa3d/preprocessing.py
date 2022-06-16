@@ -42,7 +42,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
     print(colored(0, 191, 255, "\n\n  TPFM Volume Preprocessing"), end='\r')
 
     # set the isotropic pixel resolution equal to the z sampling step
-    px_size_iso = px_size[0]*np.ones(shape=(3,))
+    px_size_iso = px_size[0] * np.ones(shape=(3,))
 
     # adjust PSF anisotropy via
     # transverse Gaussian blurring...
@@ -66,7 +66,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         print(colored(0, 191, 255, "\n  (lateral PSF degradation)"))
         print("\n                                Z      Y      X")
         print("  Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
-              .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')              
+              .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')
 
     # (no blurring)
     else:
@@ -83,7 +83,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
 
 
 def correct_tpfm_anisotropy(volume, resize_ratio,
-                            sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):                            
+                            sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
     """
     Smooth the input image volume along the lateral XY axes so that the lateral
     size of the PSF becomes equal to the PSF's depth.
@@ -127,20 +127,20 @@ def correct_tpfm_anisotropy(volume, resize_ratio,
 
         # TPFM volume lateral blurring
         if sigma is not None:
-            volume = gaussian_filter(volume, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)                                     
+            volume = gaussian_filter(volume, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
 
         # delete padded boundaries
         if pad_mat is not None:
             if np.count_nonzero(pad_mat) > 0:
-                volume = volume[pad_mat[0, 0]:volume_shape[0]-pad_mat[0, 1],
-                                pad_mat[1, 0]:volume_shape[1]-pad_mat[1, 1],
-                                pad_mat[2, 0]:volume_shape[2]-pad_mat[2, 1]]
+                volume = volume[pad_mat[0, 0]:volume_shape[0] - pad_mat[0, 1],
+                                pad_mat[1, 0]:volume_shape[1] - pad_mat[1, 1],
+                                pad_mat[2, 0]:volume_shape[2] - pad_mat[2, 1]]
 
         # TPFM volume lateral downsampling
-        iso_shape = np.ceil(np.multiply(np.asarray(volume.shape), resize_ratio)).astype(int)                                        
+        iso_shape = np.ceil(np.multiply(np.asarray(volume.shape), resize_ratio)).astype(int)
         iso_volume = np.zeros(shape=iso_shape, dtype=volume.dtype)
         for z in range(iso_shape[0]):
             iso_volume[z, ...] = resize(volume[z, ...], output_shape=tuple(iso_shape[1:]),
-                                        anti_aliasing=anti_aliasing, preserve_range=True)                                       
+                                        anti_aliasing=anti_aliasing, preserve_range=True)
 
     return iso_volume

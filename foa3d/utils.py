@@ -5,7 +5,7 @@ import numpy as np
 from astropy.visualization import make_lupton_rgb
 from h5py import File
 from matplotlib.colors import hsv_to_rgb
-from skimage.filters import (threshold_li, threshold_niblack, threshold_sauvola, threshold_triangle, threshold_yen)                             
+from skimage.filters import (threshold_li, threshold_niblack, threshold_sauvola, threshold_triangle, threshold_yen)
 from skimage.morphology import skeletonize_3d
 
 
@@ -85,7 +85,7 @@ def vector_colormap(vec_volume):
         image_r = vec_volume[z, :, :, 2]
         image_g = vec_volume[z, :, :, 1]
         image_b = vec_volume[z, :, :, 0]
-        rgb_map[z] = make_lupton_rgb(image_r, image_g, image_b, minimum=0, stretch=1, Q=8)                                     
+        rgb_map[z] = make_lupton_rgb(image_r, image_g, image_b, minimum=0, stretch=1, Q=8)
 
     return rgb_map
 

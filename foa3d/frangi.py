@@ -183,9 +183,9 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     """
     # get number of dimensions
     ndim = image.ndim
-    
+
     # scale selection
-    scaled_image = ndi.gaussian_filter(image, sigma=sigma, output=np.float32, truncate=truncate)                                       
+    scaled_image = ndi.gaussian_filter(image, sigma=sigma, output=np.float32, truncate=truncate)
 
     # compute the first order gradients
     gradient_list = np.gradient(scaled_image)
@@ -202,7 +202,7 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     hessian = np.zeros((ndim, ndim) + scaled_image.shape, dtype=scaled_image.dtype)
     for index, (ax0, ax1) in enumerate(combinations_with_replacement(range(ndim), 2)):
         element = hessian_elements[index]
-        hessian[ax0, ax1, ...] = element        
+        hessian[ax0, ax1, ...] = element
         if ax0 != ax1:
             hessian[ax1, ax0, ...] = element
 
@@ -314,7 +314,7 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
     plate = compute_plate_like_score(ra, alpha)
     blob = compute_blob_like_score(rb, beta)
     background = compute_background_score(s, gamma)
-    vesselness = reject_background(plate * blob * background, eigen2, eigen3, dark)        
+    vesselness = reject_background(plate * blob * background, eigen2, eigen3, dark)
 
     return vesselness
 
@@ -382,7 +382,7 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
 
     # compute 'auto' gamma sensitivity
     if gamma is None:
-        gamma = 0.5*np.max(s)
+        gamma = 0.5 * np.max(s)
 
     return ra, rb, s, gamma
 

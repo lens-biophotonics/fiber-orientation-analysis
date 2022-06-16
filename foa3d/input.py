@@ -33,7 +33,7 @@ def cli_parser():
     """
     # configure parser object
     cli_parser = argparse.ArgumentParser(
-        description='fiberSor: A 3D Fiber Orientation Analysis Pipeline\n'
+        description='Foa3D: A 3D Fiber Orientation Analysis Pipeline\n'
                     'author:     Michele Sorelli (2022)\n'
                     'references: Frangi  et al.  (1998) '
                     'Multiscale vessel enhancement filtering.'
@@ -150,7 +150,7 @@ def load_input_volume(cli_args):
         cidre_path = cli_args.cidre_path
         cidre_mode = cli_args.cidre_mode
         if cidre_path:
-            volume_path = correct_illumination(volume_path, models=cidre_path, mosaic=mosaic, mode=cidre_mode)                                               
+            volume_path = correct_illumination(volume_path, models=cidre_path, mosaic=mosaic, mode=cidre_mode)
 
         # load TPFM tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
@@ -286,7 +286,7 @@ def load_pipeline_config(args):
     scales_um = args.scales
     if type(scales_um) is not list:
         scales_um = [scales_um]
-    volume_name = 'a'+str(alpha)+'_b'+str(beta)+'_g'+str(gamma)+'_'+volume_name
+    volume_name = 'a' + str(alpha) + '_b' + str(beta) + '_g' + str(gamma) + '_' + volume_name
 
     # pipeline flags
     lpf_soma_mask = args.neuron_mask

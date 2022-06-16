@@ -3,7 +3,7 @@ from numba import njit
 from skimage.transform import resize
 
 
-def compute_scaled_odf(odf_scale, vec_volume, iso_fiber_array, odf_patch_shape, degrees=6):                       
+def compute_scaled_odf(odf_scale, vec_volume, iso_fiber_array, odf_patch_shape, degrees=6):
     """
     Iteratively generate 3D ODF maps at the desired spatial scale from basic slices
     of the fiber orientation vectors returned by the Frangi filtering stage.
@@ -35,12 +35,12 @@ def compute_scaled_odf(odf_scale, vec_volume, iso_fiber_array, odf_patch_shape, 
     """
     # generate downsampled background for Mrtrix3 mrview
     if iso_fiber_array is None:
-        bg_mrtrix = generate_odf_background(vec_volume, vxl_side=odf_scale)                                            
+        bg_mrtrix = generate_odf_background(vec_volume, vxl_side=odf_scale)
     else:
-        bg_mrtrix = generate_odf_background(iso_fiber_array, vxl_side=odf_scale)                                            
+        bg_mrtrix = generate_odf_background(iso_fiber_array, vxl_side=odf_scale)
 
     # compute ODF coefficients
-    odf = estimate_odf_coeff(vec_volume, odf_patch_shape, vxl_side=odf_scale, degrees=degrees)                             
+    odf = estimate_odf_coeff(vec_volume, odf_patch_shape, vxl_side=odf_scale, degrees=degrees)
 
     return odf, bg_mrtrix
 
@@ -52,7 +52,7 @@ def generate_odf_background(bg_volume, vxl_side):
 
     Parameters
     ----------
-    bg_volume: ndarray (shape=(Z,Y,X), dtype=uint8; or shape=(Z,Y,X,3), dtype=float32)                                      
+    bg_volume: ndarray (shape=(Z,Y,X), dtype=uint8; or shape=(Z,Y,X,3), dtype=float32)
         fiber image volume or vector volume
         to be used as the Mrtrix3 background image
 
@@ -65,7 +65,7 @@ def generate_odf_background(bg_volume, vxl_side):
         downsampled ODF background (fiber channel)
     """
     # get shape of new downsampled array
-    new_shape = tuple(np.ceil(np.divide(bg_volume.shape[:3],  vxl_side)).astype(int))                                     
+    new_shape = tuple(np.ceil(np.divide(bg_volume.shape[:3],  vxl_side)).astype(int))
 
     # loop over z-slices, and resize them
     bg_mrtrix = np.zeros(new_shape, dtype=np.uint8)
@@ -75,7 +75,7 @@ def generate_odf_background(bg_volume, vxl_side):
         if dims == 3:
             tmp_slice = bg_volume[z, ...].copy()
         elif dims == 4:
-            tmp_slice = 255.0*np.sum(np.abs(bg_volume[z, ...]), axis=-1)
+            tmp_slice = 255.0 * np.sum(np.abs(bg_volume[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
             tmp_slice = tmp_slice.astype(np.uint8)
         bg_mrtrix[z_out, ...] = resize(tmp_slice, output_shape=new_shape[1:], anti_aliasing=True, preserve_range=True)
@@ -84,7 +84,7 @@ def generate_odf_background(bg_volume, vxl_side):
     return bg_mrtrix
 
 
-def estimate_odf_coeff(vec_volume, odf_patch_shape, vxl_side, degrees, vxl_thr=0.5):                       
+def estimate_odf_coeff(vec_volume, odf_patch_shape, vxl_side, degrees, vxl_thr=0.5):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -104,7 +104,7 @@ def estimate_odf_coeff(vec_volume, odf_patch_shape, vxl_side, degrees, vxl_thr=0
         degrees of the spherical harmonics series expansion
 
     vec_thr: float
-        minimum relative threshold on the sliced voxel volume (default: 50%)        
+        minimum relative threshold on the sliced voxel volume (default: 50%)
 
     Returns
     -------
@@ -143,7 +143,7 @@ def estimate_odf_coeff(vec_volume, odf_patch_shape, vxl_side, degrees, vxl_thr=0
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
                 if sli_vxl_size / ref_vxl_size > vxl_thr:
                     odf_coeff[z // vxl_side, y // vxl_side, x // vxl_side, :] \
-                        = fiber_vectors_to_sph_harm(vec_vxl.ravel(), degrees, norm_factors)                                                        
+                        = fiber_vectors_to_sph_harm(vec_vxl.ravel(), degrees, norm_factors)
 
     return odf_coeff
 
@@ -260,7 +260,7 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
 
 
 @njit(cache=True)
-def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors):                          
+def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors):
     """
     Estimate the coefficients of the real spherical harmonics series expansion
     as described by Alimi et al. (Medical Image Analysis, 2020).
@@ -294,11 +294,11 @@ def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors
     elif degree == 2:
         return sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm_factors[1, :])
     elif degree == 4:
-        return sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm_factors[2, :])                                           
+        return sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm_factors[2, :])
     elif degree == 6:
-        return sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factors[3, :])                                           
+        return sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factors[3, :])
     elif degree == 8:
-        return sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factors[4, :])                                           
+        return sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factors[4, :])
     elif degree == 10:
         return sph_harm_degree_10(order, phi, sin_theta, cos_theta, norm_factors[5, :])
     else:
@@ -392,7 +392,7 @@ def norm_factor(n, m):
 
 
 @njit(cache=True)
-def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm_factor):                                
+def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm_factor):
     if order == -2:
         return norm_factor[2] * 3 * sin_theta**2 * np.sin(2 * phi)
     elif order == -1:
@@ -406,29 +406,29 @@ def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm_factor):
 
 
 @njit(cache=True)
-def sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm_factor):                                
+def sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm_factor):
     if order == -4:
         return norm_factor[4] * 105 * sin_theta**4 * np.sin(4 * phi)
     elif order == -3:
         return norm_factor[3] * 105 * sin_theta**3 * cos_theta * np.sin(3 * phi)
     elif order == -2:
-        return norm_factor[2] * 7.5 * sin_theta**2 * (7 * cos_theta**2 - 1) * np.sin(2 * phi)            
+        return norm_factor[2] * 7.5 * sin_theta**2 * (7 * cos_theta**2 - 1) * np.sin(2 * phi)
     elif order == -1:
-        return norm_factor[1] * 2.5 * sin_theta*(7 * cos_theta**3 - 3 * cos_theta) * np.sin(phi)            
+        return norm_factor[1] * 2.5 * sin_theta * (7 * cos_theta**3 - 3 * cos_theta) * np.sin(phi)
     elif order == 0:
         return norm_factor[0] * 0.125 * (35 * cos_theta**4 - 30 * cos_theta**2 + 3)
     elif order == 1:
-        return norm_factor[1] * 2.5 * sin_theta * (7 * cos_theta**3 - 3 * cos_theta) * np.cos(phi)            
+        return norm_factor[1] * 2.5 * sin_theta * (7 * cos_theta**3 - 3 * cos_theta) * np.cos(phi)
     elif order == 2:
-        return norm_factor[2] * 7.5 * sin_theta**2 * (7 * cos_theta**2 - 1) * np.cos(2 * phi)            
+        return norm_factor[2] * 7.5 * sin_theta**2 * (7 * cos_theta**2 - 1) * np.cos(2 * phi)
     elif order == 3:
-        return norm_factor[3] * 105 * sin_theta**3 * cos_theta*np.cos(3 * phi)
+        return norm_factor[3] * 105 * sin_theta**3 * cos_theta * np.cos(3 * phi)
     elif order == 4:
         return norm_factor[4] * 105 * sin_theta**4 * np.cos(4 * phi)
 
 
 @njit(cache=True)
-def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factor):                                
+def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factor):
     if order == -6:
         return norm_factor[6] * 10395 * sin_theta**6 * np.sin(6 * phi)
     elif order == -5:
@@ -460,7 +460,7 @@ def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factor):
 
 
 @njit(cache=True)
-def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factor):                                
+def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factor):
     if order == -8:
         return norm_factor[8] * 2027025 * sin_theta**8 * np.sin(8 * phi)
     elif order == -7:
@@ -468,32 +468,32 @@ def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factor):
     elif order == -6:
         return norm_factor[6] * 67567.5 * sin_theta**6 * (15 * cos_theta**2 - 1) * np.sin(6 * phi)
     elif order == -5:
-        return norm_factor[5] * 67567.5 * sin_theta**5 * (5 * cos_theta**3 - cos_theta) * np.sin(5 * phi)            
+        return norm_factor[5] * 67567.5 * sin_theta**5 * (5 * cos_theta**3 - cos_theta) * np.sin(5 * phi)
     elif order == -4:
-        return norm_factor[4] * 1299.375 * sin_theta**4 * (65 * cos_theta**4 - 26 * cos_theta**2 + 1) * np.sin(4 * phi)            
+        return norm_factor[4] * 1299.375 * sin_theta**4 * (65 * cos_theta**4 - 26 * cos_theta**2 + 1) * np.sin(4 * phi)
     elif order == -3:
         return norm_factor[3] * 433.125 * sin_theta**3 \
             * (39 * cos_theta**5 - 26 * cos_theta**3 + 3 * cos_theta) * np.sin(3 * phi)
     elif order == -2:
         return norm_factor[2] * 19.6875 * sin_theta**2 \
-            * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.sin(2 * phi)            
+            * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.sin(2 * phi)
     elif order == -1:
         return norm_factor[1] * 0.5625 * sin_theta \
-            * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.sin(phi)               
+            * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.sin(phi)
     elif order == 0:
         return norm_factor[0] * 0.0078125 \
-            * (6435 * cos_theta**8 - 12012 * cos_theta**6 + 6930 * cos_theta**4 - 1260 * cos_theta**2 + 35)               
+            * (6435 * cos_theta**8 - 12012 * cos_theta**6 + 6930 * cos_theta**4 - 1260 * cos_theta**2 + 35)
     elif order == 1:
         return norm_factor[1] * 0.5625 * sin_theta \
-            * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.cos(phi)               
+            * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.cos(phi)
     elif order == 2:
         return norm_factor[2] * 19.6875 * sin_theta**2 \
-            * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.cos(2 * phi)            
+            * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.cos(2 * phi)
     elif order == 3:
         return norm_factor[3] * 433.125 * sin_theta**3 \
             * (39 * cos_theta**5 - 26 * cos_theta**3 + 3 * cos_theta) * np.cos(3 * phi)
     elif order == 4:
-        return norm_factor[4] * 1299.375 * sin_theta**4 * (65 * cos_theta**4 - 26 * cos_theta**2 + 1) * np.cos(4 * phi)            
+        return norm_factor[4] * 1299.375 * sin_theta**4 * (65 * cos_theta**4 - 26 * cos_theta**2 + 1) * np.cos(4 * phi)
     elif order == 5:
         return norm_factor[5] * 67567.5 * sin_theta**5 * (5 * cos_theta**3 - cos_theta) * np.cos(5 * phi)
     elif order == 6:
@@ -505,27 +505,27 @@ def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factor):
 
 
 @njit(cache=True)
-def sph_harm_degree_10(order, phi, sin_theta, cos_theta,  norm_factor):                                
+def sph_harm_degree_10(order, phi, sin_theta, cos_theta,  norm_factor):
     if order == -10:
         return norm_factor[10] * 654729075 * sin_theta**10 * np.sin(10 * phi)
     elif order == -9:
         return norm_factor[9] * 654729075 * sin_theta**9 * cos_theta * np.sin(9 * phi)
     elif order == -8:
-        return norm_factor[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta**2 - 1) * np.sin(8 * phi)            
+        return norm_factor[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta**2 - 1) * np.sin(8 * phi)
     elif order == -7:
-        return norm_factor[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta**3 - 3 * cos_theta) * np.sin(7 * phi)            
+        return norm_factor[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta**3 - 3 * cos_theta) * np.sin(7 * phi)
     elif order == -6:
         return norm_factor[6] * 84459.375 * sin_theta**6 \
             * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.sin(6 * phi)
     elif order == -5:
         return norm_factor[5] * 16891.875 * sin_theta**5 \
-            * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.sin(5 * phi)            
+            * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.sin(5 * phi)
     elif order == -4:
         return norm_factor[4] * 2815.3125 * sin_theta**4 \
-            * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.sin(4 * phi)            
+            * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.sin(4 * phi)
     elif order == -3:
         return norm_factor[3] * 402.1875 * sin_theta**3 \
-            * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.sin(3 * phi)               
+            * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.sin(3 * phi)
     elif order == -2:
         return norm_factor[2] * 3.8671875 * sin_theta**2 \
             * (4199 * cos_theta**8 - 6188 * cos_theta**6 + 2730 * cos_theta**4 - 364 * cos_theta**2 + 7) \
@@ -536,8 +536,8 @@ def sph_harm_degree_10(order, phi, sin_theta, cos_theta,  norm_factor):
             * np.sin(phi)
     elif order == 0:
         return norm_factor[0] * 0.00390625 \
-            * (46189 * cos_theta**10 - 109395 * cos_theta**8 + 90090 * cos_theta**6 
-               - 30030*cos_theta**4 + 3465 * cos_theta**2 - 63)               
+            * (46189 * cos_theta**10 - 109395 * cos_theta**8 + 90090 * cos_theta**6
+               - 30030 * cos_theta**4 + 3465 * cos_theta**2 - 63)
     elif order == 1:
         return norm_factor[1] * 0.4296875 * sin_theta \
             * (4199 * cos_theta**9 - 7956 * cos_theta**7 + 4914 * cos_theta**5
@@ -545,23 +545,23 @@ def sph_harm_degree_10(order, phi, sin_theta, cos_theta,  norm_factor):
     elif order == 2:
         return norm_factor[2] * 3.8671875 * sin_theta**2 \
             * (4199 * cos_theta**8 - 6188 * cos_theta**6 + 2730 * cos_theta**4 - 364 * cos_theta**2 + 7) \
-            * np.cos(2 * phi)            
+            * np.cos(2 * phi)
     elif order == 3:
         return norm_factor[3] * 402.1875 * sin_theta**3 \
-            * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.cos(3 * phi)               
+            * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.cos(3 * phi)
     elif order == 4:
         return norm_factor[4] * 2815.3125 * sin_theta**4 \
-            * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.cos(4 * phi)            
+            * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.cos(4 * phi)
     elif order == 5:
         return norm_factor[5] * 16891.875 * sin_theta**5 \
-            * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.cos(5 * phi)            
+            * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.cos(5 * phi)
     elif order == 6:
         return norm_factor[6] * 84459.375 * sin_theta**6 \
-            * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.cos(6 * phi)            
+            * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.cos(6 * phi)
     elif order == 7:
-        return norm_factor[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta**3 - 3 * cos_theta) * np.cos(7 * phi)            
+        return norm_factor[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta**3 - 3 * cos_theta) * np.cos(7 * phi)
     elif order == 8:
-        return norm_factor[8] * 17229712.5 * sin_theta**8 * (19*cos_theta**2 - 1) * np.cos(8 * phi)            
+        return norm_factor[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta**2 - 1) * np.cos(8 * phi)
     elif order == 9:
         return norm_factor[9] * 654729075 * sin_theta**9 * cos_theta * np.cos(9 * phi)
     elif order == 10:

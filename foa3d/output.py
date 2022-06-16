@@ -29,7 +29,7 @@ def create_save_dir(volume_path):
     volume_name = volume_fullname.split('.')[0]
 
     # create saving directory
-    save_dir = path.join(base_path, time_stamp+'_'+volume_name)
+    save_dir = path.join(base_path, time_stamp + '_' + volume_name)
     if not path.isdir(save_dir):
         mkdir(save_dir)
 
@@ -60,11 +60,11 @@ def save_array(fname, save_dir, nd_array, format='tif'):
     """
     format = format.lower()
     if format == 'tif' or format == 'tiff':
-        tiff.imwrite(path.join(save_dir, fname+'.'+format), nd_array)
+        tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array)
     elif format == 'npy':
-        np.save(path.join(save_dir, fname+'.npy'), nd_array)
+        np.save(path.join(save_dir, fname + '.npy'), nd_array)
     elif format == 'nii':
         nd_array = nib.Nifti1Image(nd_array, np.eye(4))
-        nd_array.to_filename(path.join(save_dir, fname+'.nii'))
+        nd_array.to_filename(path.join(save_dir, fname + '.nii'))
     else:
         raise ValueError("  Unsupported data format!!!")
