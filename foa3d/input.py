@@ -7,10 +7,10 @@ import tifffile as tiff
 from h5py import File
 from zetastitcher import VirtualFusedVolume
 
-from foa3d.cidre import correct_illumination
 from foa3d.output import create_save_dir
 from foa3d.preprocessing import config_anisotropy_correction
-from foa3d.printing import (colored, print_import_time, print_resolution, print_volume_shape)
+from foa3d.printing import (colored, print_import_time, print_resolution,
+                            print_volume_shape)
 from foa3d.utils import get_item_bytes
 
 
@@ -67,11 +67,6 @@ def cli_parser():
     cli_parser.add_argument('--psf-fwhm-x', type=float, default=0.692, help='PSF FWHM along the X axis [μm]')
     cli_parser.add_argument('--psf-fwhm-y', type=float, default=0.692, help='PSF FWHM along the Y axis [μm]')
     cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]\n')
-    cli_parser.add_argument('--cidre-path', '--cp', type=str,
-                            help='path to CIDRE correction models (see fiber_orientation.cidre correct_illumination)')
-    cli_parser.add_argument('--cidre-mode', '--cm', type=int, default=0,
-                            help='CIDRE illumination correction '
-                                 '(options: 0, 1, 2; refer to fiber_orientation.cidre)')
     cli_parser.add_argument('--ch-fiber', type=int, default=1, help='myelinated fibers channel')
     cli_parser.add_argument('--ch-neuron', type=int, default=0, help='neuronal soma channel')
     cli_parser.add_argument('--z-min', type=int, default=0, help='forced minimum output z-depth')
@@ -146,12 +141,6 @@ def load_input_volume(cli_args):
 
     # microscopy image volume
     else:
-        # CIDRE illumination correction
-        cidre_path = cli_args.cidre_path
-        cidre_mode = cli_args.cidre_mode
-        if cidre_path:
-            volume_path = correct_illumination(volume_path, models=cidre_path, mosaic=mosaic, mode=cidre_mode)
-
         # load TPFM tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
             print("  Loading " + volume_name + " tiled reconstruction...\n")
