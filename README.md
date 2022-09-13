@@ -1,0 +1,15 @@
+
+
+## References
+Sorelli, M., Costantini, I., Mazzamuto, G., Bocchi, L., Axer, M., Pavone, F. S. (2022), Fiber enhancement and 3D orientation analysis in label-free two-photon fluorescence
+microscopy, bioarXiv, doi: insert DOI...
+
+Alimi, A., Deslauriers-Gauthier, S., Matuschke, F., Müller, A., Muenzing, S., Axer, M., & Deriche, R. (2020). Analytical and fast fiber orientation distribution reconstruction in 3D-Polarized Light Imaging. Medical Image Analysis, 65, 101760. doi: [10.1016/j.media.2020.101760](https://doi.org/10.1016/j.media.2020.101760)
+
+Frangi, A. F., Niessen, W. J., Vincken, K. L., & Viergever, M. A. (1998). Multiscale vessel enhancement filtering. Medical Image Computing and Computer-Assisted Intervention - MICCAI'98. 1496, pp. 130-137. Springer, Berlin, Heidelberg. doi: [10.1007/BFb0056195](https://doi.org/10.1007/BFb0056195)
+
+
+## Acknowledgements
+<div style="text-align: justify">
+The research leading to the development of this open source software was conducted within the Human Brain Project, and received funding from the European Union's Horizon 2020 Framework Programme for Research and Innovation under the grant agreement No. 654148 (Laserlab-Europe) and the Specific Grant Agreements No. 785907 and No. 945539 (SGA2 and SGA3); from the General Hospital Corporation Center of the National Institutes of Health under the award number U01 MH117023; from the Italian Ministry for Education within the framework of the Euro-Bioimaging Italian Node (ESFRI research infrastructure); and from Fondazione CR Firenze (private foundation, project title: Human Brain Optical Mapping).
+</div>
