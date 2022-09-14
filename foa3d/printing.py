@@ -176,6 +176,21 @@ def print_pipeline_heading():
     print("\n> " + color_text(0, 250, 154, "3D Fiber Orientation Analysis"))
 
 
+def print_prepro_heading():
+    """
+    Print preprocessing heading.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
+    print(color_text(0, 191, 255, "\n\n  Microscopy Image Volume Preprocessing"), end='\r')
+
+
 def print_resolution(px_size, psf_fwhm):
     """
     Print pixel and optical resolution of the microscopy system.

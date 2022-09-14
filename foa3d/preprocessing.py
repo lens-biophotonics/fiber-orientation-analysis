@@ -2,50 +2,43 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage.transform import resize
 
-from foa3d.printing import color_text
+from foa3d.printing import color_text, print_prepro_heading
 from foa3d.utils import fwhm_to_sigma
 
 
 def config_anisotropy_correction(px_size, psf_fwhm):
     """
-    Confocal laser scanning microscopes and light-sheet microscopes provide
-    3D fluorescence data with a lower resolution along the optical axis
-    (i.e. the z-axis).
-    However, the longitudinal PSF anisotropy introduces a strong bias
-    in the estimated 3D orientations [Morawski et al. 2018].
-
-    Thus, for obtaining a uniform resolution over the 3 dimensions of the input
-    TPFM image volumes, the X and Y axes need in general to be blurred.
-    The in-plane standard deviation of the applied low-pass Gaussian kernel
-    will depend on the PSF size (i.e., on the input FWHM values) as follows:
-
-    PSF_sigma_x**2 + gauss_sigma_x**2 = PSF_sigma_z**2
-    PSF_sigma_y**2 + gauss_sigma_y**2 = PSF_sigma_z**2
+    Scanning and light-sheet microscopes provide 3D fluorescence data
+    characterized by a lower resolution along the optical axis
+    (i.e. the z-axis). However, the longitudinal PSF anisotropy introduces
+    a strong bias in the estimated 3D orientations
+    as discussed by Morawski et al. (NeuroImage, 2018).
+    Thus, for obtaining a uniform 3D resolution, the X and Y axes of the input
+    microscopy volume images need in general to be blurred.
 
     Parameters
     ----------
-    px_size: ndarray (shape=(3,), dtype=float)
+    px_size: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
-    psf_fwhm: ndarray (shape=(3,), dtype=float)
-        3D PSF FWHM in [μm]
+    psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
+        3D PSF FWHM [μm]
 
     Returns
     -------
-    smooth_sigma: ndarray (shape=(3,), dtype=int)
-        3D standard deviation of low-pass Gaussian filter [px]
+    smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
+        3D standard deviation of the low-pass Gaussian filter [px]
 
-    px_size_iso: ndarray (shape=(3,), dtype=float)
-        new isotropic spatial sampling [μm]
+    px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
+        new isotropic pixel size [μm]
     """
-    # get preprocessing stage configuration (resolution anisotropy correction)
-    print(color_text(0, 191, 255, "\n\n  Microscopy Image Volume Preprocessing"), end='\r')
+    # print preprocessing heading
+    print_prepro_heading()
 
-    # set the isotropic pixel resolution equal to the z sampling step
+    # set the isotropic pixel resolution equal to the z-sampling step
     px_size_iso = px_size[0] * np.ones(shape=(3,))
 
-    # adjust PSF anisotropy via
-    # transverse Gaussian blurring...
+    # adjust PSF anisotropy via lateral Gaussian blurring
     if not np.all(psf_fwhm == psf_fwhm[0]):
 
         # estimate the PSF variance from input FWHM values [μm**2]
@@ -55,7 +48,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         gauss_var_x = psf_var[0] - psf_var[2]
         gauss_var_y = psf_var[0] - psf_var[1]
 
-        # ...and standard deviation [pixel]
+        # ...and the corresponding standard deviation [px]
         gauss_sigma_x = np.sqrt(gauss_var_x) / px_size[2]
         gauss_sigma_y = np.sqrt(gauss_var_y) / px_size[1]
         gauss_sigma_z = 0
@@ -85,38 +78,37 @@ def config_anisotropy_correction(px_size, psf_fwhm):
 def correct_image_anisotropy(volume, resize_ratio,
                              sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
     """
-    Smooth the input image volume along the lateral XY axes so that the lateral
-    size of the PSF becomes equal to the PSF's depth.
+    Smooth the input volume image along the X and Y axes so that the lateral
+    and longitudinal sizes of the optical system's PSF become equal.
     Downsample data in the XY plane in order to uniform the 3D pixel size.
 
     Parameters
     ----------
-    volume: ndarray (shape=(Z,Y,X))
+    volume: numpy.ndarray (shape=(Z,Y,X))
         input TPFM image volume
 
-    resize_ratio: ndarray (shape=(3,), dtype=float)
-        3D axes resize ratio
+    resize_ratio: numpy.ndarray (shape=(3,), dtype=float)
+        3D resize ratio
 
-    sigma: ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the blurring Gaussian filter [px]
+    sigma: numpy.ndarray (shape=(3,), dtype=int)
+        3D standard deviation of the low-pass Gaussian filter [px]
 
-    pad_mat: ndarray
+    pad_mat: numpy.ndarray (shape=(3,2), dtype=int)
         padding range array
 
-    pad_mode: string
+    pad_mode: str
         data padding mode adopted for the Gaussian filter
 
     anti_aliasing: bool
-        if True, apply anti-aliasing filter when downsampling the XY plane
+        if True, apply an anti-aliasing filter when downsampling the XY plane
 
     truncate: int
         truncate the Gaussian kernel at this many standard deviations
-        (default: 4)
 
     Returns
     -------
     iso_volume: ndarray (shape=(Z,Y,X))
-        isotropic microscopy image volume
+        isotropic microscopy volume image
     """
     # no resizing
     if np.all(resize_ratio == 1):
@@ -125,7 +117,7 @@ def correct_image_anisotropy(volume, resize_ratio,
         # get original volume shape
         volume_shape = volume.shape
 
-        # TPFM volume lateral blurring
+        # lateral blurring
         if sigma is not None:
             volume = gaussian_filter(volume, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
 
@@ -136,7 +128,7 @@ def correct_image_anisotropy(volume, resize_ratio,
                                 pad_mat[1, 0]:volume_shape[1] - pad_mat[1, 1],
                                 pad_mat[2, 0]:volume_shape[2] - pad_mat[2, 1]]
 
-        # TPFM volume lateral downsampling
+        # lateral downsampling
         iso_shape = np.ceil(np.multiply(np.asarray(volume.shape), resize_ratio)).astype(int)
         iso_volume = np.zeros(shape=iso_shape, dtype=volume.dtype)
         for z in range(iso_shape[0]):
