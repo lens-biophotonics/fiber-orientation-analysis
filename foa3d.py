@@ -1,4 +1,4 @@
-from foa3d.input import cli_parser, load_input_volume, load_pipeline_config
+from foa3d.input import cli_parser, load_volume, get_pipeline_config
 from foa3d.pipeline import (iterate_frangi_on_slices, iterate_odf_on_slices,
                             save_frangi_volumes, save_odf_volumes)
 from foa3d.printing import print_odf_heading, print_pipeline_heading
@@ -8,11 +8,11 @@ from foa3d.utils import delete_tmp_files
 def foa3d(cli_args):
 
     # load image volume or dataset of fiber orientation vectors
-    volume, mosaic, skip_frangi = load_input_volume(cli_args)
+    volume, mosaic, skip_frangi = load_volume(cli_args)
 
     # get pipeline configuration
     alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, z_min, z_max, \
-        ch_neuron, ch_fiber, max_slice_size, lpf_soma_mask, save_dir, volume_name = load_pipeline_config(cli_args)
+        ch_neuron, ch_fiber, max_slice_size, lpf_soma_mask, save_dir, volume_name = get_pipeline_config(cli_args)
 
     # iteratively apply 3D Frangi-based fiber enhancement to basic image slices
     if not skip_frangi:

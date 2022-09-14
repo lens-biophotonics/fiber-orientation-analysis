@@ -20,7 +20,7 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
 
 def cli_parser():
     """
-    Parse input command line arguments.
+    Parse command line arguments.
 
     Parameters
     ----------
@@ -28,8 +28,8 @@ def cli_parser():
 
     Returns
     -------
-    cli_args:
-        command line arguments
+    cli_args: see ArgumentParser.parse_args
+        populated namespace of command line arguments
     """
     # configure parser object
     cli_parser = argparse.ArgumentParser(
@@ -45,7 +45,7 @@ def cli_parser():
                     'Medical Image Analysis, 65, pp. 101760.\n\n',
         formatter_class=CustomFormatter)
     cli_parser.add_argument(dest='volume_path',
-                            help='path to input microscopy image volume\n'
+                            help='path to input microscopy volume image\n'
                                  '* supported formats: .tif, .npy, .yml (ZetaStitcher stitch file), '
                                  '.h5 (4D dataset of fiber vectors)\n'
                                  '* image  axes order: (Z, Y, X)\n'
@@ -81,29 +81,205 @@ def cli_parser():
     return cli_args
 
 
-def load_input_volume(cli_args):
+def get_pipeline_config(cli_args):
     """
-    Load microscopy volume from TIFF, NumPy or ZetaStitcher .yml file.
-    Apply CIDRE-based illumination correction if required.
-    Alternatively, the processing pipeline accepts .h5 datasets of
-    fiber orientation vectors as input: in this case, the
-    Frangi filtering stage will be skipped.
+    Retrieve the Foa3D pipeline configuration.
 
     Parameters
     ----------
-    cli_args:
-        command line arguments
+    cli_args: see ArgumentParser.parse_args
+        populated namespace of command line arguments
 
     Returns
     -------
-    volume: ndarray or HDF5 dataset
-            (shape=(Z,C,Y,X) for .yml stitch files,
-             shape=(Z,Y,X,3) for .h5 datasets,
-             shape=(Z,Y,X,C) otherwise)
-        microscopy image volume or fiber orientation vector dataset
+    alpha: float
+        plate-like score sensitivity
+
+    beta: float
+        blob-like score sensitivity
+
+    gamma: float
+        background score sensitivity
+
+    smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
+        3D standard deviation of low-pass Gaussian filter [px]
+
+    px_size: numpy.ndarray (shape=(3,), dtype=float)
+        pixel size [μm]
+
+    px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
+        adjusted isotropic pixel size [μm]
+
+    odf_scales_um: list (dtype: float)
+        list of fiber ODF resolution values (super-voxel sides [μm])
+
+    odf_degrees: int
+        degrees of the spherical harmonics series expansion
+
+    z_min: int
+        minimum output z-depth [px]
+
+    z_max: int
+        maximum output z-depth [px]
+
+    ch_neuron: int
+        neuronal bodies channel
+
+    ch_fiber: int
+        myelinated fibers channel
+
+    max_slice_size: float
+        maximum memory size (in bytes) of the basic image slices
+        analyzed iteratively
+
+    lpf_soma_mask: bool
+        neuronal body masking
+
+    save_dir: str
+        saving directory path
+
+    volume_name: str
+        name of the input volume image
+    """
+    # volume filename
+    volume_path = cli_args.volume_path
+    volume_fname = os.path.basename(volume_path)
+    volume_name = volume_fname.split('.')[0]
+
+    # Frangi filter parameters
+    alpha = cli_args.alpha
+    beta = cli_args.beta
+    gamma = cli_args.gamma
+    scales_um = cli_args.scales
+    if type(scales_um) is not list:
+        scales_um = [scales_um]
+    volume_name = 'a' + str(alpha) + '_b' + str(beta) + '_g' + str(gamma) + '_' + volume_name
+
+    # pipeline flags
+    lpf_soma_mask = cli_args.neuron_mask
+    ch_neuron = cli_args.ch_neuron
+    ch_fiber = cli_args.ch_fiber
+    max_slice_size = cli_args.max_slice_size
+
+    # ODF analysis
+    odf_scales_um = cli_args.odf_res
+    odf_degrees = cli_args.odf_deg
+
+    # TPFM pixel size and PSF FWHM
+    px_size, psf_fwhm = get_resolution(cli_args)
+
+    # forced output z-range
+    z_min = cli_args.z_min
+    z_max = cli_args.z_max
+    z_min = int(np.floor(z_min / px_size[0]))
+    if z_max is not None:
+        z_max = int(np.ceil(z_max / px_size[0]))
+
+    # preprocessing configuration
+    smooth_sigma, px_size_iso = config_anisotropy_correction(px_size, psf_fwhm)
+
+    # create saving directory
+    save_dir = create_save_dir(volume_path)
+
+    return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
+        z_min, z_max, ch_neuron, ch_fiber, max_slice_size, lpf_soma_mask, save_dir, volume_name
+
+
+def get_resolution(cli_args):
+    """
+    Retrieve microscopy resolution from command line arguments.
+
+    Parameters
+    ----------
+    cli_args: see ArgumentParser.parse_args
+        populated namespace of command line arguments
+
+    Returns
+    -------
+    px_size: ndarray (shape=(3,), dtype=float)
+        pixel size [μm]
+
+    psf_fwhm: ndarray (shape=(3,), dtype=float)
+        3D PSF FWHM [μm]
+    """
+    # pixel size
+    px_size_z = cli_args.px_size_z
+    px_size_xy = cli_args.px_size_xy
+
+    # psf
+    psf_fwhm_z = cli_args.psf_fwhm_z
+    psf_fwhm_y = cli_args.psf_fwhm_y
+    psf_fwhm_x = cli_args.psf_fwhm_x
+
+    px_size = np.array([px_size_z, px_size_xy, px_size_xy])
+    psf_fwhm = np.array([psf_fwhm_z, psf_fwhm_y, psf_fwhm_x])
+
+    # print TPFM resolution info
+    print_resolution(px_size, psf_fwhm)
+
+    return px_size, psf_fwhm
+
+
+def get_volume_info(volume, px_size, mosaic=False):
+    """
+    Get information on the input microscopy volume image.
+
+    Parameters
+    ----------
+    volume: numpy.ndarray
+        microscopy volume image
+
+    px_size: numpy.ndarray (shape=(3,), dtype=float)
+        pixel size [μm]
 
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
+
+    Returns
+    -------
+    volume_shape: numpy.ndarray (shape=(3,), dtype=int)
+        volume image shape [px]
+
+    volume_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+        volume image shape [μm]
+
+    volume_item_size: int
+        array item size (in bytes)
+    """
+    # adapt channel axis
+    if mosaic:
+        channel_axis = 1
+    else:
+        channel_axis = -1
+
+    # get info on microscopy volume image
+    volume_shape = np.asarray(volume.shape)
+    volume_shape = np.delete(volume_shape, channel_axis)
+    volume_shape_um = np.multiply(volume_shape, px_size)
+    volume_item_size = get_item_bytes(volume)
+
+    return volume_shape, volume_shape_um, volume_item_size
+
+
+def load_volume(cli_args):
+    """
+    Load microscopy volume image from TIFF, NumPy or ZetaStitcher .yml file.
+    Alternatively, the processing pipeline accepts as input .h5 datasets of
+    fiber orientation vectors: in this case, the Frangi filter stage will be
+    skipped.
+
+    Parameters
+    ----------
+    cli_args: see ArgumentParser.parse_args
+        populated namespace of command line arguments
+
+    Returns
+    -------
+    volume: numpy.ndarray or HDF5 dataset
+        microscopy volume image or dataset of fiber orientation vectors
+
+    mosaic: bool
+        True for tiled microscopy reconstructions aligned using ZetaStitcher
     """
     # print heading
     print(color_text(0, 191, 255, "\n  Microscopy Volume Image Import\n"))
@@ -118,7 +294,7 @@ def load_input_volume(cli_args):
 
     # check input volume format (ZetaStitcher .yml file)
     if len(split_fname) == 1:
-        raise ValueError('  Format must be specified for input image volumes!')
+        raise ValueError('  Format must be specified for input volume images!')
     else:
         volume_format = split_fname[-1]
         if volume_format == 'yml':
@@ -139,13 +315,13 @@ def load_input_volume(cli_args):
             vector = True
             print("  Loading " + volume_name + " orientation dataset...\n")
 
-    # microscopy image volume
+    # microscopy volume image
     else:
-        # load TPFM tiled reconstruction (aligned using ZetaStitcher)
+        # load tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
             print("  Loading " + volume_name + " tiled reconstruction...\n")
             volume = VirtualFusedVolume(volume_path)
-        # load TPFM z-stack
+        # load z-stack
         else:
             print("  Loading " + volume_fname + " z-stack...\n")
             volume_format = volume_format.lower()
@@ -157,186 +333,7 @@ def load_input_volume(cli_args):
     # print import time
     print_import_time(tic)
 
-    # print volume shape
+    # print volume image shape
     print_volume_shape(cli_args, volume, mosaic)
 
     return volume, mosaic, vector
-
-
-def get_volume_info(volume, px_size, mosaic=False):
-    """
-    Get information on the input microscopy volume.
-
-    Parameters
-    ----------
-    volume: ndarray
-        TPFM image array
-
-    px_size: ndarray (shape=(3,), dtype=float)
-        original TPFM spatial resolution in [μm]
-
-    mosaic: bool
-        True for tiled reconstructions aligned using ZetaStitcher
-
-    Returns
-    -------
-    volume_shape: ndarray (shape=(3,), dtype=int)
-        volume shape [px]
-
-    volume_shape_um: ndarray (shape=(3,), dtype=float)
-        volume shape [μm]
-
-    volume_item_size: int
-        array item size (in bytes)
-    """
-    # adapt channel axis
-    if mosaic:
-        channel_axis = 1
-    else:
-        channel_axis = -1
-
-    # get microscopy volume info
-    volume_shape = np.asarray(volume.shape)
-    volume_shape = np.delete(volume_shape, channel_axis)
-    volume_shape_um = np.multiply(volume_shape, px_size)
-    volume_item_size = get_item_bytes(volume)
-
-    return volume_shape, volume_shape_um, volume_item_size
-
-
-def load_pipeline_config(args):
-    """
-    Retrieve Frangi filter pipeline configuration.
-
-    Parameters
-    ----------
-    args:
-        command line arguments
-
-    Returns
-    -------
-    alpha: float
-        plate-like score sensitivity
-
-    beta: float
-        blob-like score sensitivity
-
-    gamma: float
-        background score sensitivity
-
-    smooth_sigma: ndarray
-        3D standard deviation of low-pass Gaussian filter [px]
-
-    px_size: ndarray
-        original TPFM spatial resolution in [μm]
-
-    px_size_iso: ndarray
-        adjusted isotropic TPFM spatial resolution in [μm]
-
-    odf_scales_um: list (dtype: float)
-        list of fiber ODF resolution values (super-voxel sides in [μm])
-
-    odf_degrees: int
-        degrees of the spherical harmonics series expansion
-
-    z_min: int
-        minimum output z-depth in [px]
-
-    z_max: int
-        maximum output z-depth in [px]
-
-    ch_neuron: int
-        neuronal bodies channel
-
-    ch_fiber: int
-        myelinated fibers channel
-
-    max_slice_size: float
-        maximum memory size (in bytes) of the basic slices analyzed iteratively
-
-    lpf_soma_mask: bool
-        neuronal body masking flag
-
-    save_dir: str
-        saving directory path
-
-    volume_name: str
-        name of the input TPFM volume
-    """
-    # volume filename
-    volume_path = args.volume_path
-    volume_fname = os.path.basename(volume_path)
-    volume_name = volume_fname.split('.')[0]
-
-    # Frangi filter parameters
-    alpha = args.alpha
-    beta = args.beta
-    gamma = args.gamma
-    scales_um = args.scales
-    if type(scales_um) is not list:
-        scales_um = [scales_um]
-    volume_name = 'a' + str(alpha) + '_b' + str(beta) + '_g' + str(gamma) + '_' + volume_name
-
-    # pipeline flags
-    lpf_soma_mask = args.neuron_mask
-    ch_neuron = args.ch_neuron
-    ch_fiber = args.ch_fiber
-    max_slice_size = args.max_slice_size
-
-    # ODF analysis
-    odf_scales_um = args.odf_res
-    odf_degrees = args.odf_deg
-
-    # TPFM pixel size and PSF FWHM
-    px_size, psf_fwhm = load_microscope_config(args)
-
-    # forced output z-range
-    z_min = args.z_min
-    z_max = args.z_max
-    z_min = int(np.floor(z_min / px_size[0]))
-    if z_max is not None:
-        z_max = int(np.ceil(z_max / px_size[0]))
-
-    # preprocessing configuration
-    smooth_sigma, px_size_iso = config_anisotropy_correction(px_size, psf_fwhm)
-
-    # create saving directory
-    save_dir = create_save_dir(volume_path)
-
-    return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
-        z_min, z_max, ch_neuron, ch_fiber, max_slice_size, lpf_soma_mask, save_dir, volume_name
-
-
-def load_microscope_config(args):
-    """
-    Retrieve microscope parameters from command line.
-
-    Parameters
-    ----------
-    args:
-        command line arguments
-
-    Returns
-    -------
-    px_size: ndarray (shape=(3,), dtype=float)
-        original TPFM pixel size in [μm]
-
-    psf_fwhm: ndarray (shape=(3,), dtype=float)
-        3D PSF FWHM in [μm]
-    """
-    # pixel size
-    px_size_z = args.px_size_z
-    px_size_xy = args.px_size_xy
-
-    # psf
-    psf_fwhm_z = args.psf_fwhm_z
-    psf_fwhm_y = args.psf_fwhm_y
-    psf_fwhm_x = args.psf_fwhm_x
-
-    px_size = np.array([px_size_z, px_size_xy, px_size_xy])
-    psf_fwhm = np.array([psf_fwhm_z, psf_fwhm_y, psf_fwhm_x])
-
-    # print TPFM resolution info
-    print_resolution(px_size, psf_fwhm)
-
-    return px_size, psf_fwhm
