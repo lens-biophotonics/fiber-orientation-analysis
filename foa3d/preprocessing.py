@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage.transform import resize
 
-from foa3d.printing import colored
+from foa3d.printing import color_text
 from foa3d.utils import fwhm_to_sigma
 
 
@@ -39,7 +39,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         new isotropic spatial sampling [μm]
     """
     # get preprocessing stage configuration (resolution anisotropy correction)
-    print(colored(0, 191, 255, "\n\n  Microscopy Image Volume Preprocessing"), end='\r')
+    print(color_text(0, 191, 255, "\n\n  Microscopy Image Volume Preprocessing"), end='\r')
 
     # set the isotropic pixel resolution equal to the z sampling step
     px_size_iso = px_size[0] * np.ones(shape=(3,))
@@ -63,7 +63,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
 
         # print preprocessing info
         gauss_sigma_um = np.multiply(smooth_sigma, px_size)
-        print(colored(0, 191, 255, "\n  (lateral PSF degradation)"))
+        print(color_text(0, 191, 255, "\n  (lateral PSF degradation)"))
         print("\n                                Z      Y      X")
         print("  Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
               .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')

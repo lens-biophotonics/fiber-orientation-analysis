@@ -9,7 +9,7 @@ from zetastitcher import VirtualFusedVolume
 
 from foa3d.output import create_save_dir
 from foa3d.preprocessing import config_anisotropy_correction
-from foa3d.printing import (colored, print_import_time, print_resolution,
+from foa3d.printing import (color_text, print_import_time, print_resolution,
                             print_volume_shape)
 from foa3d.utils import get_item_bytes
 
@@ -106,7 +106,7 @@ def load_input_volume(cli_args):
         True for tiled reconstructions aligned using ZetaStitcher
     """
     # print heading
-    print(colored(0, 191, 255, "\n  Microscopy Image Volume Import\n"))
+    print(color_text(0, 191, 255, "\n  Microscopy Volume Image Import\n"))
 
     # retrieve volume path and name
     volume_path = cli_args.volume_path

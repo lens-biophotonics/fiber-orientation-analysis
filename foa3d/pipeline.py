@@ -8,9 +8,10 @@ from foa3d.input import get_volume_info
 from foa3d.odf import compute_scaled_odf, get_sph_harm_ncoeff
 from foa3d.output import save_array
 from foa3d.preprocessing import correct_image_anisotropy
-from foa3d.printing import (colored, print_analysis_time, print_frangi_heading,
-                            print_masking_info, print_odf_supervoxel,
-                            print_slice_progress, print_slicing_info)
+from foa3d.printing import (color_text, print_analysis_time,
+                            print_frangi_heading, print_odf_supervoxel,
+                            print_slice_progress, print_slicing_info,
+                            print_soma_masking)
 from foa3d.slicing import (compute_chunk_range, config_frangi_slicing,
                            config_odf_slicing, crop_chunk, slice_channel)
 from foa3d.utils import (create_background_mask, create_hdf5_file,
@@ -265,7 +266,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
         print_slicing_info(volume_shape_um, in_chunk_shape_um, px_size, volume_item_size)
 
         # print neuron masking info
-        print_masking_info(lpf_soma_mask)
+        print_soma_masking(lpf_soma_mask)
 
     # iteratively apply Frangi filtering to basic TPFM slices
     loop_range = np.ceil(np.divide(volume_shape, in_chunk_shape)).astype(int)
@@ -616,7 +617,7 @@ def save_frangi_volumes(vec_volume, vec_colmap, frangi_volume, fiber_mask, neuro
     None
     """
     # final print
-    print(colored(0, 191, 255, "  Saving Frangi Filtering Volumes...\n"))
+    print(color_text(0, 191, 255, "  Saving Frangi Filtering Volumes...\n"))
 
     # create subfolder
     save_dir = path.join(save_dir, 'frangi')
@@ -680,7 +681,7 @@ def save_odf_volumes(odf_list, bg_mrtrix_list, save_dir, volume_name, odf_scales
     None
     """
     # final print
-    print(colored(0, 191, 255, "  Saving ODF Analysis Volumes...\n\n\n"))
+    print(color_text(0, 191, 255, "  Saving ODF Analysis Volumes...\n\n\n"))
 
     # create ODF subfolder
     save_dir = path.join(save_dir, 'odf')

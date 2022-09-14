@@ -1,11 +1,14 @@
 import gc
 from os import remove
+from time import perf_counter
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
 from h5py import File
 from matplotlib.colors import hsv_to_rgb
-from skimage.filters import (threshold_li, threshold_niblack, threshold_sauvola, threshold_triangle, threshold_yen)
+from skimage.filters import (threshold_li, threshold_niblack,
+                             threshold_sauvola, threshold_triangle,
+                             threshold_yen)
 from skimage.morphology import skeletonize_3d
 
 
@@ -409,3 +412,31 @@ def fwhm_to_sigma(fwhm):
     sigma = np.sqrt(np.square(fwhm) / (8 * np.log(2)))
 
     return sigma
+
+
+def elapsed_time(start_time):
+    """
+    Compute elapsed time from the input start reference.
+
+    Parameters
+    ----------
+    start_time: float
+        start time reference
+
+    Returns
+    -------
+    total: float
+        total time [s]
+
+    mins: float
+        minutes
+
+    secs: float
+        seconds
+    """
+    stop_time = perf_counter()
+    total = stop_time - start_time
+    mins = total // 60
+    secs = total % 60
+
+    return total, mins, secs
