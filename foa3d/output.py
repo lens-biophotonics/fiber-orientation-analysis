@@ -8,12 +8,12 @@ import tifffile as tiff
 
 def create_save_dir(volume_path):
     """
-    Create local saving directory.
+    Create saving directory.
 
     Parameters
     ----------
-    volume_path: string
-        input volume path string
+    volume_path: str
+        path to input microscopy volume image
 
     Returns
     -------
@@ -23,7 +23,7 @@ def create_save_dir(volume_path):
     # get current time
     time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    # get image volume name
+    # get volume image name
     base_path = path.dirname(volume_path)
     volume_fullname = path.basename(volume_path)
     volume_name = volume_fullname.split('.')[0]
@@ -38,7 +38,7 @@ def create_save_dir(volume_path):
 
 def save_array(fname, save_dir, nd_array, format='tif'):
     """
-    Save input array to .tif file
+    Save array to file.
 
     Parameters
     ----------
@@ -48,8 +48,8 @@ def save_array(fname, save_dir, nd_array, format='tif'):
     save_dir: string
         saving directory string path
 
-    nd_array: ndarray
-        input data
+    nd_array: numpy.ndarray
+        data
 
     format: str
         output format
