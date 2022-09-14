@@ -255,7 +255,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                               z_min=z_min, z_max=z_max, lpf_soma_mask=lpf_soma_mask)
 
     # compute the Frangi filter's scale values in pixel
-    sigma_px = config_frangi_scales(scales_um, px_size_iso[0])
+    scales_px = config_frangi_scales(scales_um, px_size_iso[0])
 
     # print info in verbose mode
     if verbose:
@@ -304,7 +304,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
 
                     # 3D Frangi filtering
                     frangi_patch, vec_patch \
-                        = frangi_filter(iso_fiber_patch, sigma_px=sigma_px,
+                        = frangi_filter(iso_fiber_patch, scales_px=scales_px,
                                         alpha=alpha, beta=beta, gamma=gamma, dark_fibers=dark_fibers)
 
                     # generate RGB orientation color map
