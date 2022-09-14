@@ -12,8 +12,8 @@ from foa3d.printing import (color_text, print_analysis_time,
                             print_frangi_heading, print_odf_supervoxel,
                             print_slice_progress, print_slicing_info,
                             print_soma_masking)
-from foa3d.slicing import (compute_chunk_range, config_frangi_slicing,
-                           config_odf_slicing, crop_chunk, slice_channel)
+from foa3d.slicing import (compute_slice_range, config_frangi_slicing,
+                           config_odf_slicing, crop_slice, slice_channel)
 from foa3d.utils import (create_background_mask, create_hdf5_file,
                          get_item_bytes, orient_colormap, transform_axes,
                          vector_colormap)
@@ -284,10 +284,10 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                     print_slice_progress(loop_count, tot=total_iter)
 
                 # index ranges of the analyzed fiber patch (with padding)
-                rng_in, pad_mat = compute_chunk_range(z, y, x, in_chunk_shape, volume_shape, pad_rng=pad)
+                rng_in, pad_mat = compute_slice_range(z, y, x, in_chunk_shape, volume_shape, pad_rng=pad)
 
                 # output index ranges
-                rng_out, _ = compute_chunk_range(z, y, x, out_chunk_shape, out_volume_shape)
+                rng_out, _ = compute_slice_range(z, y, x, out_chunk_shape, out_volume_shape)
 
                 # slice fiber image patch
                 fiber_mask = slice_channel(volume, rng_in, channel=ch_fiber, mosaic=mosaic)
@@ -300,7 +300,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                                                                sigma=smooth_sigma, pad_mat=pad_mat)
 
                     # crop isotropized fiber patch
-                    iso_fiber_patch = crop_chunk(iso_fiber_patch, rng_out)
+                    iso_fiber_patch = crop_slice(iso_fiber_patch, rng_out)
 
                     # 3D Frangi filtering
                     frangi_patch, vec_patch \
@@ -322,7 +322,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                     if lpf_soma_mask:
 
                         # neuron patch index ranges (without padding)
-                        rng_in, _ = compute_chunk_range(z, y, x, in_chunk_shape, volume_shape)
+                        rng_in, _ = compute_slice_range(z, y, x, in_chunk_shape, volume_shape)
 
                         # slice neuron image patch
                         neuron_patch = slice_channel(volume, rng_in, channel=ch_neuron, mosaic=mosaic)
@@ -331,7 +331,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                         iso_neuron_patch = correct_image_anisotropy(neuron_patch, px_rsz_ratio)
 
                         # crop isotropized neuron patch
-                        iso_neuron_patch = crop_chunk(iso_neuron_patch, rng_out)
+                        iso_neuron_patch = crop_slice(iso_neuron_patch, rng_out)
 
                         # mask neuronal bodies
                         vec_patch, orientcol_patch, neuron_mask = \
@@ -496,10 +496,10 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso, save_dir, max_s
                     print_slice_progress(loop_count, tot=total_iter)
 
                 # input index ranges
-                rng_in, _ = compute_chunk_range(z, y, x, vec_patch_shape, vec_volume_shape)
+                rng_in, _ = compute_slice_range(z, y, x, vec_patch_shape, vec_volume_shape)
 
                 # ODF index ranges
-                rng_odf, _ = compute_chunk_range(x, y, z, np.flip(odf_patch_shape), odf_volume_shape, flip=True)
+                rng_odf, _ = compute_slice_range(x, y, z, np.flip(odf_patch_shape), odf_volume_shape, flip=True)
 
                 # load dataset chunks to NumPy arrays, transform axes
                 if iso_fiber_dset is None:
@@ -518,8 +518,8 @@ def iterate_odf_on_slices(vec_dset, iso_fiber_dset, px_size_iso, save_dir, max_s
                 bg_mrtrix_chunk = transform_axes(bg_mrtrix_chunk, swapped=(0, 2), flipped=(0, 1, 2))
 
                 # crop output chunks
-                odf_chunk = crop_chunk(odf_chunk, rng_odf, flipped=(0, 1, 2))
-                bg_mrtrix_chunk = crop_chunk(bg_mrtrix_chunk, rng_odf, flipped=(0, 1, 2))
+                odf_chunk = crop_slice(odf_chunk, rng_odf, flipped=(0, 1, 2))
+                bg_mrtrix_chunk = crop_slice(bg_mrtrix_chunk, rng_odf, flipped=(0, 1, 2))
 
                 # fill datasets
                 bg_mrtrix_volume[rng_odf] = bg_mrtrix_chunk
