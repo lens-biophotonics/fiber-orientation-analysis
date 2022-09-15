@@ -11,7 +11,7 @@ from foa3d.output import create_save_dir
 from foa3d.preprocessing import config_anisotropy_correction
 from foa3d.printing import (color_text, print_import_time, print_resolution,
                             print_volume_shape)
-from foa3d.utils import get_item_bytes
+from foa3d.utils import get_item_bytes, get_output_prefix
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
@@ -153,7 +153,10 @@ def get_pipeline_config(cli_args):
     scales_um = cli_args.scales
     if type(scales_um) is not list:
         scales_um = [scales_um]
-    volume_name = 'a' + str(alpha) + '_b' + str(beta) + '_g' + str(gamma) + '_' + volume_name
+
+    # add pipeline configuration prefix to input volume name
+    pfx = get_output_prefix(scales_um, alpha, beta, gamma)
+    volume_name = pfx + 'img' + volume_name
 
     # pipeline flags
     lpf_soma_mask = cli_args.neuron_mask

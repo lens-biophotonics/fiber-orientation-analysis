@@ -689,5 +689,5 @@ def save_odf_volumes(odf_list, bg_mrtrix_list, save_dir, volume_name, odf_scales
 
     # ODF analysis volumes to Nifti files (adjusted view for Mrtrix3)
     for (odf, bg, s) in zip(odf_list, bg_mrtrix_list, odf_scales_um):
-        save_array(f'bg_mrtrixview_{s}_' + volume_name, save_dir, bg, format='nii')
-        save_array(f'odf_mrtrixview_{s}_' + volume_name, save_dir, odf, format='nii')
+        save_array(f'bg_mrtrixview_sv{s}_' + volume_name, save_dir, bg, format='nii')
+        save_array(f'odf_mrtrixview_sv{s}_' + volume_name, save_dir, odf, format='nii')

@@ -211,6 +211,39 @@ def get_item_bytes(data):
     return bytes
 
 
+def get_output_prefix(scales_um, alpha, beta, gamma):
+    """
+    Generate the output filename prefix including
+    pipeline configuration information.
+
+    Parameters
+    ----------
+    scales_um: list (dtype=float)
+        analyzed spatial scales in [μm]
+
+    alpha: float
+        plate-like score sensitivity
+
+    beta: float
+        blob-like score sensitivity
+
+    gamma: float
+        background score sensitivity
+
+    Returns
+    -------
+    pfx: str
+        pipeline configuration prefix
+    """
+    # generate prefix
+    pfx = 'sc'
+    for s in scales_um:
+        pfx = pfx + str(s) + '_'
+    pfx = 'a' + str(alpha) + '_b' + str(beta) + '_g' + str(gamma) + '_' + pfx
+
+    return pfx
+
+
 def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
     """
     Normalize angle to [lower, upper) range.
