@@ -27,7 +27,6 @@ def analyze_hessian_eigen(image, sigma, truncate=4):
 
     truncate: int
         truncate the Gaussian smoothing kernel at this many standard deviations
-        (default: 4)
 
     Returns
     -------
@@ -280,7 +279,7 @@ def config_frangi_scales(scales_um, px_size):
     return scales_px
 
 
-def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark_fibers=True):
+def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True):
     """
     Apply 3D Frangi filter to input volume image.
 
@@ -301,7 +300,7 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark_fi
     gamma: float
         background score sensitivity (if None, gamma is automatically tailored)
 
-    dark_fibers: bool
+    dark: bool
         if True, enhance black 3D tubular structures
 
     Returns
@@ -321,12 +320,12 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark_fi
     n_scales = len(scales_px)
     if n_scales == 1:
         fiber_vectors, enhanced_array \
-            = compute_scaled_orientation(scales_px[0], image, alpha=alpha, beta=beta, gamma=gamma,  dark=dark_fibers)
+            = compute_scaled_orientation(scales_px[0], image, alpha=alpha, beta=beta, gamma=gamma,  dark=dark)
 
     # parallel scaled vesselness analysis
     else:
         par_compute_orientation \
-            = partial(compute_scaled_orientation, image=image, alpha=alpha, beta=beta, gamma=gamma, dark=dark_fibers)
+            = partial(compute_scaled_orientation, image=image, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
         with mp.Pool(n_scales) as p:
             eigenvectors_list, enhanced_array_list = zip(*p.map(par_compute_orientation, scales_px))

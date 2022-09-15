@@ -188,7 +188,7 @@ def print_prepro_heading():
     -------
     None
     """
-    print(color_text(0, 191, 255, "\n\n  Microscopy Image Volume Preprocessing"), end='\r')
+    print(color_text(0, 191, 255, "\n\n  Microscopy Volume Image Preprocessing"), end='\r')
 
 
 def print_resolution(px_size, psf_fwhm):

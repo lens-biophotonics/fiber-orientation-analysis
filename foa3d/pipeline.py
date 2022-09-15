@@ -359,7 +359,7 @@ def iterate_frangi_on_slices(volume, px_size, px_size_iso, smooth_sigma, save_di
                     # 3D Frangi filter
                     frangi_slice, fiber_vec_slice \
                         = frangi_filter(iso_fiber_slice, scales_px=scales_px,
-                                        alpha=alpha, beta=beta, gamma=gamma, dark_fibers=dark)
+                                        alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
                     # generate RGB orientation color map
                     if orient_cmap:

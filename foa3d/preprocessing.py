@@ -28,6 +28,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
     -------
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
         3D standard deviation of the low-pass Gaussian filter [px]
+        (applied to the XY plane)
 
     px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
         new isotropic pixel size [μm]
@@ -92,6 +93,7 @@ def correct_image_anisotropy(volume, resize_ratio,
 
     sigma: numpy.ndarray (shape=(3,), dtype=int)
         3D standard deviation of the low-pass Gaussian filter [px]
+        (applied to the XY plane)
 
     pad_mat: numpy.ndarray (shape=(3,2), dtype=int)
         padding range array

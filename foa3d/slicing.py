@@ -164,6 +164,7 @@ def compute_smoothing_pad_range(smooth_sigma, truncate=4):
     ----------
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
         3D standard deviation of the low-pass Gaussian filter [px]
+        (applied to the XY plane)
 
     truncate: int
         truncate the Gaussian kernel at this many standard deviations
@@ -203,6 +204,7 @@ def config_frangi_slicing(volume_shape, volume_item_size, px_size, px_size_iso, 
 
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
         3D standard deviation of the low-pass Gaussian filter [px]
+        (applied to the XY plane)
 
     max_slice_size: float
         maximum memory size (in bytes) of the basic image slices
