@@ -623,10 +623,6 @@ def save_frangi_volumes(fiber_vec_volume, fiber_vec_colmap, frangi_volume, fiber
     if not path.isdir(save_dir):
         mkdir(save_dir)
 
-    # save eigenvectors to .npy file
-    save_array('fiber_vec_' + volume_name, save_dir, fiber_vec_volume,
-               format='npy')
-
     # save orientation color map to TIF
     save_array('fiber_cmap_' + volume_name, save_dir, fiber_vec_colmap)
 
