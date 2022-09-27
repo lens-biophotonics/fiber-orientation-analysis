@@ -125,7 +125,7 @@ def compute_scaled_odf(odf_scale, fibervec_volume, iso_fiber_array, odf_patch_sh
     return odf, bg_mrtrix
 
 
-def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5):
+def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=0.1):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -144,8 +144,11 @@ def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_
     degrees: int
         degrees of the spherical harmonics series expansion
 
+    vxl_thr: float
+        minimum relative threshold on the sliced voxel volume
+
     vec_thr: float
-        minimum relative threshold on the sliced voxel volume (default: 50%)
+        minimum relative threshold on non-zero orientation vectors
 
     Returns
     -------
@@ -163,7 +166,7 @@ def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_
     norm_factors = get_sph_harm_norm_factors(degrees)
 
     # impose a relative threshold on zero orientation vectors
-    ref_vxl_size = min(vxl_side, fibervec_volume.shape[0]) * vxl_side**2
+    ref_vxl_size = min(vxl_side, fibervec_volume.shape[0]) * vxl_side**2    
     for z in range(0, fibervec_volume.shape[0], vxl_side):
         zmax = z + vxl_side
         if zmax >= fibervec_volume.shape[0]:
@@ -181,8 +184,10 @@ def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_
 
                 # slice vector voxel (skip boundary voxels)
                 vec_vxl = fibervec_volume[z:zmax, y:ymax, x:xmax, :]
+                nonzero_vecs = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
-                if sli_vxl_size / ref_vxl_size > vxl_thr:
+                if sli_vxl_size / ref_vxl_size > vxl_thr and \
+                   nonzero_vecs / sli_vxl_size > vec_thr:
                     odf[z // vxl_side, y // vxl_side, x // vxl_side, :] \
                         = fiber_vectors_to_sph_harm(vec_vxl.ravel(), degrees, norm_factors)
 
