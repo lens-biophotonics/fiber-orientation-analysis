@@ -4,12 +4,15 @@
 fiber enhancement and 3D orientation analysis in large high-resolution image
 volumes acquired by two-photon scanning or light-sheet fluorescence microscopy.
 
-Key features
-------------
+## Key features
 
 * parallel multiscale fiber enhancement and segmentation
 * efficient multiscale fiber orientation distribution functions
 * able to handle large tiled microscopy reconstructions
+
+## Documentation
+Please read the documentation at this page:
+https://lens-biophotonics.github.io/Foa3D/
 
 ## References
 

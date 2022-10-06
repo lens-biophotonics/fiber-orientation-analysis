@@ -1,0 +1,52 @@
+name: Python package and documentation
+
+on:
+  push:
+  pull_request:
+    branches:
+      - '**:**'  # run only for PR from forked repos
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - uses: actions/cache@v2
+      with:
+        path: ${{ env.pythonLocation }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('./requirements.txt', './requirements-dev.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    - uses: actions/cache@v2
+      with:
+        path: ~/.local
+        key: ${{ runner.os }}-pip-${{ hashFiles('./requirements.txt', './requirements-dev.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install . && foa3d -h
+        pip uninstall -y foa3d
+        pip install -r requirements-dev.txt
+    - name: Build wheel
+      run: pip install wheel && make
+    - name: sphinx
+      working-directory: ./doc
+      env:
+        PYTHONPATH: ..
+      run: make html
+    - name: GitHub Pages
+      uses: crazy-max/ghaction-github-pages@v2.2.0
+      if: github.ref == 'refs/heads/main'
+      with:
+        build_dir: doc/build/html
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
