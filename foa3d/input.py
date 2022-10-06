@@ -5,7 +5,11 @@ from time import perf_counter
 import numpy as np
 import tifffile as tiff
 from h5py import File
-from zetastitcher import VirtualFusedVolume
+
+try:
+    from zetastitcher import VirtualFusedVolume
+except ImportError:
+    pass
 
 from foa3d.output import create_save_dir
 from foa3d.preprocessing import config_anisotropy_correction

@@ -54,8 +54,11 @@ def foa3d(cli_args):
     delete_tmp_files(tmp_hdf5_list)
 
 
-if __name__ == '__main__':
-
+def main():
     # start Foa3D pipeline by terminal
     print_pipeline_heading()
     foa3d(cli_args=cli_parser())
+
+
+if __name__ == '__main__':
+    main()
