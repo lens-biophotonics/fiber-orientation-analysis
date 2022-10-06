@@ -14,7 +14,13 @@ help:
 
 .PHONY: help Makefile
 
-# Catch-all target: route all unknown targets to Sphinx using the new
-# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
-%: Makefile
+html: Makefile generate_rst
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	cp ../dist/foa3d-`python -c 'import foa3d; print(foa3d.__version__)'`-py3-none-any.whl build/html || true
+	sed -i 's|doc/_static|_static|' build/html/index.html
+
+generate_rst:
+	sphinx-apidoc -faM --separate -o generated ../foa3d
+
+clean:
+	rm -fr _build generated
