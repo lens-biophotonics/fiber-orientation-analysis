@@ -1,0 +1,6 @@
+astropy
+h5py
+matplotlib
+nibabel
+numba
+scikit-image
