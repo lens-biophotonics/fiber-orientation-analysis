@@ -12,12 +12,13 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
-import sys
-import sphinx_rtd_theme
 
-sys.path.insert(0, 'C:/Users/Michele/Desktop/HBP/pycode/Foa3D/foa3d')
-sys.path.insert(0, 'C:/Users/Michele/Desktop/HBP/pycode/Foa3D/foa3d/foa3d')
+import sys
+from os.path import basename
+from io import StringIO
+
+from foa3d import __version__
+import sphinx_rtd_theme
 
 
 # -- Project information -----------------------------------------------------
@@ -27,7 +28,7 @@ copyright = '2022, Michele Sorelli'
 author = 'Michele Sorelli'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1'
+release = __version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -95,3 +96,34 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+
+from docutils.parsers.rst import Directive
+from docutils import nodes, statemachine
+
+
+class ExecDirective(Directive):
+    """Execute the specified python code and insert the output into the document"""
+    has_content = True
+
+    def run(self):
+        oldStdout, sys.stdout = sys.stdout, StringIO()
+
+        tab_width = self.options.get('tab-width', self.state.document.settings.tab_width)
+        source = self.state_machine.input_lines.source(self.lineno - self.state_machine.input_offset - 1)
+
+        try:
+            exec('\n'.join(self.content))
+            text = sys.stdout.getvalue()
+            lines = statemachine.string2lines(text, tab_width, convert_whitespace=True)
+            self.state_machine.insert_input(lines, source)
+            return []
+        except Exception:
+            return [nodes.error(None, nodes.paragraph(text = "Unable to execute python code at %s:%d:" % (basename(source), self.lineno)), nodes.paragraph(text = str(sys.exc_info()[1])))]
+        finally:
+            sys.stdout = oldStdout
+
+
+def setup(app):
+    app.add_js_file('https://docs.python.org/3/_static/copybutton.js')
+    app.add_directive('exec', ExecDirective)

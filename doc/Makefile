@@ -6,7 +6,7 @@
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = source
-BUILDDIR      = build
+BUILDDIR      = _build
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -16,8 +16,8 @@ help:
 
 html: Makefile generate_rst
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
-	cp ../dist/foa3d-`python -c 'import foa3d; print(foa3d.__version__)'`-py3-none-any.whl build/html || true
-	sed -i 's|doc/_static|_static|' build/html/index.html
+	cp ../dist/foa3d-`python -c 'import foa3d; print(foa3d.__version__)'`-py3-none-any.whl _build/html
+	sed -i 's|doc/_static|_static|' _build/html/index.html
 
 generate_rst:
 	sphinx-apidoc -faM --separate -o generated ../foa3d
