@@ -125,7 +125,7 @@ def compute_scaled_odf(odf_scale, fiber_vec_image, iso_fiber_array, odf_patch_sh
     return odf, bg_mrtrix
 
 
-def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=0.1):
+def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=-1):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
