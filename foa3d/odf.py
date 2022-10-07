@@ -4,7 +4,7 @@ from skimage.transform import resize
 
 
 @njit(cache=True)
-def compute_fiber_angles(fibervec_array, norm):
+def compute_fiber_angles(fiber_vec_array, norm):
     """
     Estimate the spherical coordinates (azimuth (φ) and polar (θ) angles)
     of the fiber orientation vectors returned by the Frangi filtering stage
@@ -12,7 +12,7 @@ def compute_fiber_angles(fibervec_array, norm):
 
     Parameters
     ----------
-    fibervec_array: numpy.ndarray (shape=(N,3), dtype=float)
+    fiber_vec_array: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
         (flattened super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
 
@@ -27,9 +27,9 @@ def compute_fiber_angles(fibervec_array, norm):
     theta: numpy.ndarray (shape=(N,), dtype=float)
         fiber polar angle [rad]
     """
-    fibervec_array = fibervec_array[norm > 0, :]
-    phi = np.arctan2(fibervec_array[:, 1], fibervec_array[:, 2])
-    theta = np.arccos(fibervec_array[:, 0] / norm[norm > 0])
+    fiber_vec_array = fiber_vec_array[norm > 0, :]
+    phi = np.arctan2(fiber_vec_array[:, 1], fiber_vec_array[:, 2])
+    theta = np.arccos(fiber_vec_array[:, 0] / norm[norm > 0])
 
     return phi, theta
 
@@ -83,7 +83,7 @@ def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors
     return real_sph_harm
 
 
-def compute_scaled_odf(odf_scale, fibervec_volume, iso_fiber_array, odf_patch_shape, degrees=6):
+def compute_scaled_odf(odf_scale, fiber_vec_image, iso_fiber_array, odf_patch_shape, degrees=6):
     """
     Iteratively generate 3D ODF maps at the desired spatial scale from basic slices
     of the fiber orientation vectors returned by the Frangi filtering stage.
@@ -93,7 +93,7 @@ def compute_scaled_odf(odf_scale, fibervec_volume, iso_fiber_array, odf_patch_sh
     odf_scale: int
         fiber ODF resolution (super-voxel side [px])
 
-    fibervec_volume: numpy.ndarray (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float32)
         fiber orientation vectors
 
     iso_fiber_array: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
@@ -115,24 +115,24 @@ def compute_scaled_odf(odf_scale, fibervec_volume, iso_fiber_array, odf_patch_sh
     """
     # generate downsampled background for Mrtrix3 mrview
     if iso_fiber_array is None:
-        bg_mrtrix = generate_odf_background(fibervec_volume, vxl_side=odf_scale)
+        bg_mrtrix = generate_odf_background(fiber_vec_image, vxl_side=odf_scale)
     else:
         bg_mrtrix = generate_odf_background(iso_fiber_array, vxl_side=odf_scale)
 
     # compute ODF coefficients
-    odf = estimate_odf_coeff(fibervec_volume, odf_patch_shape, vxl_side=odf_scale, degrees=degrees)
+    odf = estimate_odf_coeff(fiber_vec_image, odf_patch_shape, vxl_side=odf_scale, degrees=degrees)
 
     return odf, bg_mrtrix
 
 
-def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=0.1):
+def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=0.1):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
 
     Parameters
     ----------
-    fibervec_volume: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    fiber_vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         fiber orientation vectors
 
     odf_slice_shape: numpy.ndarray (shape=(Z,Y,X), dtype=int)
@@ -166,24 +166,24 @@ def estimate_odf_coeff(fibervec_volume, odf_slice_shape, vxl_side, degrees, vxl_
     norm_factors = get_sph_harm_norm_factors(degrees)
 
     # impose a relative threshold on zero orientation vectors
-    ref_vxl_size = min(vxl_side, fibervec_volume.shape[0]) * vxl_side**2    
-    for z in range(0, fibervec_volume.shape[0], vxl_side):
+    ref_vxl_size = min(vxl_side, fiber_vec_image.shape[0]) * vxl_side**2
+    for z in range(0, fiber_vec_image.shape[0], vxl_side):
         zmax = z + vxl_side
-        if zmax >= fibervec_volume.shape[0]:
-            zmax = fibervec_volume.shape[0]
+        if zmax >= fiber_vec_image.shape[0]:
+            zmax = fiber_vec_image.shape[0]
 
-        for y in range(0, fibervec_volume.shape[1], vxl_side):
+        for y in range(0, fiber_vec_image.shape[1], vxl_side):
             ymax = y + vxl_side
-            if ymax >= fibervec_volume.shape[1]:
-                ymax = fibervec_volume.shape[1]
+            if ymax >= fiber_vec_image.shape[1]:
+                ymax = fiber_vec_image.shape[1]
 
-            for x in range(0, fibervec_volume.shape[2], vxl_side):
+            for x in range(0, fiber_vec_image.shape[2], vxl_side):
                 xmax = x + vxl_side
-                if xmax >= fibervec_volume.shape[2]:
-                    xmax = fibervec_volume.shape[2]
+                if xmax >= fiber_vec_image.shape[2]:
+                    xmax = fiber_vec_image.shape[2]
 
                 # slice vector voxel (skip boundary voxels)
-                vec_vxl = fibervec_volume[z:zmax, y:ymax, x:xmax, :]
+                vec_vxl = fiber_vec_image[z:zmax, y:ymax, x:xmax, :]
                 nonzero_vecs = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
                 if sli_vxl_size / ref_vxl_size > vxl_thr and \
@@ -267,14 +267,14 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
     return real_sph_harm
 
 
-def fiber_vectors_to_sph_harm(fibervec_array, degrees, norm_factors):
+def fiber_vectors_to_sph_harm(fiber_vec_array, degrees, norm_factors):
     """
     Generate the real-valued symmetric spherical harmonics series expansion
     from the fiber orientation vectors returned by the Frangi filter stage.
 
     Parameters
     ----------
-    fibervec_array: numpy.ndarray (shape=(N,3), dtype=float)
+    fiber_vec_array: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
         (flattened super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
 
@@ -286,24 +286,24 @@ def fiber_vectors_to_sph_harm(fibervec_array, degrees, norm_factors):
 
     Returns
     -------
-    real_sph_harm: ndarray (shape=(ncoeff,), dtype=float)
+    real_sph_harm: numpy.ndarray (shape=(ncoeff,), dtype=float)
         real-valued spherical harmonics coefficients
     """
-    fibervec_array.shape = (-1, 3)
+    fiber_vec_array.shape = (-1, 3)
     ncoeff = get_sph_harm_ncoeff(degrees)
 
-    norm = np.linalg.norm(fibervec_array, axis=-1)
-    if np.sum(norm) < np.sqrt(fibervec_array.shape[0]):
+    norm = np.linalg.norm(fiber_vec_array, axis=-1)
+    if np.sum(norm) < np.sqrt(fiber_vec_array.shape[0]):
         return np.zeros(ncoeff)
 
-    phi, theta = compute_fiber_angles(fibervec_array, norm)
+    phi, theta = compute_fiber_angles(fiber_vec_array, norm)
 
     real_sph_harm = fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff)
 
     return real_sph_harm
 
 
-def generate_odf_background(bg_volume, vxl_side):
+def generate_odf_background(bg_image, vxl_side):
     """
     Generate the downsampled background image required
     to visualize the 3D ODF map in Mrtrix3.
@@ -311,7 +311,7 @@ def generate_odf_background(bg_volume, vxl_side):
     Parameters
     ----------
     bg_volume: numpy.ndarray (shape=(Z,Y,X), dtype=uint8; or shape=(Z,Y,X,3), dtype=float32)
-        fiber image volume or vector volume
+        fiber volume image or orientation vector volume
         to be used as the Mrtrix3 background image
 
     vxl_side: int
@@ -323,17 +323,17 @@ def generate_odf_background(bg_volume, vxl_side):
         downsampled ODF background (fiber channel)
     """
     # get shape of new downsampled array
-    new_shape = tuple(np.ceil(np.divide(bg_volume.shape[:3],  vxl_side)).astype(int))
+    new_shape = tuple(np.ceil(np.divide(bg_image.shape[:3],  vxl_side)).astype(int))
 
     # loop over z-slices, and resize them
     bg_mrtrix = np.zeros(new_shape, dtype=np.uint8)
-    dims = bg_volume.ndim
+    dims = bg_image.ndim
     z_out = 0
-    for z in range(0, bg_volume.shape[0], vxl_side):
+    for z in range(0, bg_image.shape[0], vxl_side):
         if dims == 3:
-            tmp_slice = bg_volume[z, ...].copy()
+            tmp_slice = bg_image[z, ...].copy()
         elif dims == 4:
-            tmp_slice = 255.0 * np.sum(np.abs(bg_volume[z, ...]), axis=-1)
+            tmp_slice = 255.0 * np.sum(np.abs(bg_image[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
             tmp_slice = tmp_slice.astype(np.uint8)
         bg_mrtrix[z_out, ...] = resize(tmp_slice, output_shape=new_shape[1:], anti_aliasing=True, preserve_range=True)

@@ -6,13 +6,13 @@ import numpy as np
 import tifffile as tiff
 
 
-def create_save_dir(volume_path):
+def create_save_dir(image_path):
     """
     Create saving directory.
 
     Parameters
     ----------
-    volume_path: str
+    image_path: str
         path to input microscopy volume image
 
     Returns
@@ -24,12 +24,12 @@ def create_save_dir(volume_path):
     time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     # get volume image name
-    base_path = path.dirname(volume_path)
-    volume_fullname = path.basename(volume_path)
-    volume_name = volume_fullname.split('.')[0]
+    base_path = path.dirname(image_path)
+    image_fullname = path.basename(image_path)
+    image_name = image_fullname.split('.')[0]
 
     # create saving directory
-    save_dir = path.join(base_path, time_stamp + '_' + volume_name)
+    save_dir = path.join(base_path, time_stamp + '_' + image_name)
     if not path.isdir(save_dir):
         mkdir(save_dir)
 

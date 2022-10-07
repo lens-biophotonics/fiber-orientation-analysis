@@ -8,7 +8,7 @@ from foa3d.utils import fwhm_to_sigma
 
 def config_anisotropy_correction(px_size, psf_fwhm):
     """
-    Scanning and light-sheet microscopes provide 3D fluorescence data
+    Scanning and light-sheet fluorescence microscopes provide 3D data
     characterized by a lower resolution along the optical axis
     (i.e. the z-axis). However, the longitudinal PSF anisotropy introduces
     a strong bias in the estimated 3D orientations
@@ -27,8 +27,8 @@ def config_anisotropy_correction(px_size, psf_fwhm):
     Returns
     -------
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the low-pass Gaussian filter [px]
-        (applied to the XY plane)
+        3D standard deviation of low-pass Gaussian filter [px]
+        (resolution anisotropy correction)
 
     px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
         new isotropic pixel size [μm]
@@ -76,7 +76,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
     return smooth_sigma, px_size_iso
 
 
-def correct_image_anisotropy(volume, resize_ratio,
+def correct_image_anisotropy(image, resize_ratio,
                              sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
     """
     Smooth the input volume image along the X and Y axes so that the lateral
@@ -85,15 +85,15 @@ def correct_image_anisotropy(volume, resize_ratio,
 
     Parameters
     ----------
-    volume: numpy.ndarray (shape=(Z,Y,X))
-        input TPFM image volume
+    image: numpy.ndarray (shape=(Z,Y,X))
+        microscopy volume image
 
     resize_ratio: numpy.ndarray (shape=(3,), dtype=float)
         3D resize ratio
 
     sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the low-pass Gaussian filter [px]
-        (applied to the XY plane)
+        3D standard deviation of low-pass Gaussian filter [px]
+        (resolution anisotropy correction)
 
     pad_mat: numpy.ndarray (shape=(3,2), dtype=int)
         padding range array
@@ -109,32 +109,32 @@ def correct_image_anisotropy(volume, resize_ratio,
 
     Returns
     -------
-    iso_volume: ndarray (shape=(Z,Y,X))
+    iso_image: numpy.ndarray (shape=(Z,Y,X))
         isotropic microscopy volume image
     """
     # no resizing
     if np.all(resize_ratio == 1):
-        iso_volume = volume
+        iso_image = image
     else:
         # get original volume shape
-        volume_shape = volume.shape
+        image_shape = image.shape
 
         # lateral blurring
         if sigma is not None:
-            volume = gaussian_filter(volume, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
+            image = gaussian_filter(image, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
 
         # delete padded boundaries
         if pad_mat is not None:
             if np.count_nonzero(pad_mat) > 0:
-                volume = volume[pad_mat[0, 0]:volume_shape[0] - pad_mat[0, 1],
-                                pad_mat[1, 0]:volume_shape[1] - pad_mat[1, 1],
-                                pad_mat[2, 0]:volume_shape[2] - pad_mat[2, 1]]
+                image = image[pad_mat[0, 0]:image_shape[0] - pad_mat[0, 1],
+                              pad_mat[1, 0]:image_shape[1] - pad_mat[1, 1],
+                              pad_mat[2, 0]:image_shape[2] - pad_mat[2, 1]]
 
         # lateral downsampling
-        iso_shape = np.ceil(np.multiply(np.asarray(volume.shape), resize_ratio)).astype(int)
-        iso_volume = np.zeros(shape=iso_shape, dtype=volume.dtype)
+        iso_shape = np.ceil(np.multiply(np.asarray(image.shape), resize_ratio)).astype(int)
+        iso_image = np.zeros(shape=iso_shape, dtype=image.dtype)
         for z in range(iso_shape[0]):
-            iso_volume[z, ...] = resize(volume[z, ...], output_shape=tuple(iso_shape[1:]),
-                                        anti_aliasing=anti_aliasing, preserve_range=True)
+            iso_image[z, ...] = resize(image[z, ...], output_shape=tuple(iso_shape[1:]),
+                                       anti_aliasing=anti_aliasing, preserve_range=True)
 
-    return iso_volume
+    return iso_image

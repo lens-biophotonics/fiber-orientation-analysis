@@ -114,7 +114,7 @@ def print_import_time(start_time):
     None
     """
     _, mins, secs = elapsed_time(start_time)
-    print("  Volume loaded in: {0} min {1:3.1f} s".format(mins, secs))
+    print("  Volume image loaded in: {0} min {1:3.1f} s".format(mins, secs))
 
 
 def print_odf_heading(odf_scales_um, odf_degrees):
@@ -138,14 +138,14 @@ def print_odf_heading(odf_scales_um, odf_degrees):
     print("  Expansion degrees: {}".format(odf_degrees))
 
 
-def print_odf_supervoxel(volume_shape, px_size_iso, odf_scale_um):
+def print_odf_supervoxel(voxel_shape, px_size_iso, odf_scale_um):
     """
-    Print ODF super-voxel size.
+    Print size of the ODF super-voxel.
 
     Parameters
     ----------
-    volume_shape: numpy.ndarray (shape=(3,), dtype=int)
-        volume image shape [px]
+    voxel_shape: numpy.ndarray (shape=(3,), dtype=int)
+        ODF super-voxel shape [px]
 
     px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
         adjusted isotropic pixel size [μm]
@@ -158,7 +158,7 @@ def print_odf_supervoxel(volume_shape, px_size_iso, odf_scale_um):
     None
     """
     print("\n  Super-voxel [\u03BCm]:\t{0} x {1} x {1}"
-          .format(min(volume_shape[0] * px_size_iso[0], odf_scale_um), odf_scale_um))
+          .format(min(voxel_shape[0] * px_size_iso[0], odf_scale_um), odf_scale_um))
 
 
 def print_pipeline_heading():
@@ -207,10 +207,8 @@ def print_resolution(px_size, psf_fwhm):
     -------
     None
     """
-    print("  Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
-          .format(px_size[0], px_size[1], px_size[2]))
-    print("  PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
-          .format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
+    print("  Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_size[0], px_size[1], px_size[2]))
+    print("  PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
 def print_slice_progress(count, tot):
@@ -230,19 +228,17 @@ def print_slice_progress(count, tot):
     None
     """
     prc_progress = 100 * (count / tot)
-    print('  Processing slice {0}/{1}: {2:0.1f}%'
-          .format(count, tot, prc_progress), end='\r')
+    print('  Processing slice {0}/{1}: {2:0.1f}%'.format(count, tot, prc_progress), end='\r')
 
 
-def print_slicing_info(volume_shape_um, slice_shape_um, px_size,
-                       volume_item_size):
+def print_slicing_info(image_shape_um, slice_shape_um, px_size, image_item_size):
     """
     Print information on the slicing of the basic image sub-volumes
     iteratively processed by the Foa3D pipeline.
 
     Parameters
     ----------
-    volume_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+    image_shape_um: numpy.ndarray (shape=(3,), dtype=float)
         volume image shape [μm]
 
     slice_shape_um: numpy.ndarray (shape=(3,), dtype=float)
@@ -251,7 +247,7 @@ def print_slicing_info(volume_shape_um, slice_shape_um, px_size,
     px_size: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
-    volume_item_size: int
+    image_item_size: int
         image item size (in bytes)
 
     Returns
@@ -259,21 +255,21 @@ def print_slicing_info(volume_shape_um, slice_shape_um, px_size,
     None
     """
     # adjust slice shape
-    if np.any(volume_shape_um < slice_shape_um):
-        slice_shape_um = volume_shape_um
+    if np.any(image_shape_um < slice_shape_um):
+        slice_shape_um = image_shape_um
 
-    # get volume memory size
-    volume_size = volume_item_size * np.prod(np.divide(volume_shape_um, px_size))
+    # get image memory size
+    image_size = image_item_size * np.prod(np.divide(image_shape_um, px_size))
 
     # get slice memory size
-    max_slice_size = volume_item_size * np.prod(np.divide(slice_shape_um, px_size))
+    max_slice_size = image_item_size * np.prod(np.divide(slice_shape_um, px_size))
 
     # print info
     print("\n                                Z      Y      X")
-    print("  Total volume shape   [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(volume_shape_um[0], volume_shape_um[1], volume_shape_um[2]))
-    print("  Total volume size    [MB]: {0}\n"
-          .format(np.ceil(volume_size / 1024**2).astype(int)))
+    print("  Total image shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+          .format(image_shape_um[0], image_shape_um[1], image_shape_um[2]))
+    print("  Total image size     [MB]: {0}\n"
+          .format(np.ceil(image_size / 1024**2).astype(int)))
     print("  Basic slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(slice_shape_um[0], slice_shape_um[1], slice_shape_um[2]))
     print("  Basic slice size     [MB]: {0}\n"
@@ -298,17 +294,17 @@ def print_soma_masking(lpf_soma_mask):
         print("  Lipofuscin-based soma masking: OFF\n")
 
 
-def print_volume_shape(cli_args, volume, mosaic):
+def print_image_shape(cli_args, image, mosaic):
     """
     Print volume image shape.
 
     Parameters
     ----------
-    cli_args:
-        command line arguments
+    cli_args: see ArgumentParser.parse_args
+        populated namespace of command line arguments
 
-    volume: numpy.ndarray (shape=(Z,Y,X))
-        volume image
+    image: numpy.ndarray (shape=(Z,Y,X))
+        microscopy volume image
 
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
@@ -317,7 +313,7 @@ def print_volume_shape(cli_args, volume, mosaic):
     -------
     None
     """
-    # retrieve TPFM pixel size
+    # get pixel size
     px_size_z = cli_args.px_size_z
     px_size_xy = cli_args.px_size_xy
 
@@ -327,10 +323,10 @@ def print_volume_shape(cli_args, volume, mosaic):
     else:
         channel_axis = -1
 
-    # get volume shape
-    volume_shape = volume.shape
-    volume_shape = np.delete(volume_shape, channel_axis)
+    # get image shape
+    image_shape = image.shape
+    image_shape = np.delete(image_shape, channel_axis)
 
     print("\n                                Z      Y      X")
-    print("  Volume shape         [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(volume_shape[0] * px_size_z, volume_shape[1] * px_size_xy, volume_shape[2] * px_size_xy))
+    print("  Image shape          [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+          .format(image_shape[0] * px_size_z, image_shape[1] * px_size_xy, image_shape[2] * px_size_xy))

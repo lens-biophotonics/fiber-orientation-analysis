@@ -11,13 +11,13 @@ from skimage.filters import (threshold_li, threshold_niblack,
 from skimage.morphology import skeletonize_3d
 
 
-def create_background_mask(volume, thresh_method='yen', skeletonize=False):
+def create_background_mask(image, thresh_method='yen', skeletonize=False):
     """
     Compute background mask.
 
     Parameters
     ----------
-    volume: numpy.ndarray (shape=(Z,Y,X))
+    image: numpy.ndarray (shape=(Z,Y,X))
         microscopy volume image
 
     thresh_method: str
@@ -33,24 +33,24 @@ def create_background_mask(volume, thresh_method='yen', skeletonize=False):
     """
     # select thresholding method
     if thresh_method == 'li':
-        initial_li_guess = np.mean(volume[volume != 0])
-        thresh = threshold_li(volume, initial_guess=initial_li_guess)
+        initial_li_guess = np.mean(image[image != 0])
+        thresh = threshold_li(image, initial_guess=initial_li_guess)
     elif thresh_method == 'niblack':
-        thresh = threshold_niblack(volume, window_size=15, k=0.2)
+        thresh = threshold_niblack(image, window_size=15, k=0.2)
     elif thresh_method == 'sauvola':
-        thresh = threshold_sauvola(volume, window_size=15, k=0.2, r=None)
+        thresh = threshold_sauvola(image, window_size=15, k=0.2, r=None)
     elif thresh_method == 'triangle':
-        thresh = threshold_triangle(volume, nbins=256)
+        thresh = threshold_triangle(image, nbins=256)
     elif thresh_method == 'yen':
-        thresh = threshold_yen(volume, nbins=256)
+        thresh = threshold_yen(image, nbins=256)
     else:
         raise ValueError("  Unsupported thresholding method!!!")
 
     # compute mask
-    background_mask = volume < thresh
+    background_mask = image < thresh
 
     # skeletonize mask
-    if skeletonize is True:
+    if skeletonize:
         background_mask = np.logical_not(background_mask)
         background_mask = skeletonize_3d(background_mask)
         background_mask = np.logical_not(background_mask)
@@ -78,9 +78,11 @@ def create_hdf5_file(path, dset_shape, chunk_shape, dtype):
 
     Returns
     -------
-    file: HDF5 file object
+    file:
+        HDF5 file object
 
-    dset: HDF5 dataset
+    dset:
+        HDF5 dataset
     """
     file = File(path, 'w')
     dset = file.create_dataset('chunked', tuple(dset_shape), chunks=tuple(chunk_shape), dtype=dtype)
@@ -88,13 +90,13 @@ def create_hdf5_file(path, dset_shape, chunk_shape, dtype):
     return file, dset
 
 
-def delete_tmp_files(file_list):
+def delete_tmp_files(file_lst):
     """
     Close and remove temporary files.
 
     Parameters
     ----------
-    file_list: list
+    file_lst: list
         list of temporary file dictionaries
         ('path': file path; 'obj': file object)
 
@@ -102,10 +104,10 @@ def delete_tmp_files(file_list):
     -------
     None
     """
-    if type(file_list) is not list:
-        file_list = [file_list]
+    if type(file_lst) is not list:
+        file_lst = [file_lst]
 
-    for file in file_list:
+    for file in file_lst:
         file['obj'].close()
         remove(file['path'])
 
@@ -139,7 +141,7 @@ def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
 
 def elapsed_time(start_time):
     """
-    Compute elapsed time from the input start reference.
+    Compute elapsed time from input start reference.
 
     Parameters
     ----------
@@ -345,13 +347,13 @@ def normalize_image(image, max_out_value=255.0, dtype=np.uint8):
     return norm_image
 
 
-def orient_colormap(vec_volume):
+def orient_colormap(vec_image):
     """
     Compute HSV colormap of vector orientations from 3D vector field.
 
     Parameters
     ----------
-    vec_volume: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         orientation vectors
 
     Returns
@@ -360,11 +362,11 @@ def orient_colormap(vec_volume):
         orientation color map
     """
     # get input array shape
-    vec_volume_shape = vec_volume.shape
+    vec_image_shape = vec_image.shape
 
     # select planar components
-    vy = vec_volume[..., 1]
-    vx = vec_volume[..., 2]
+    vy = vec_image[..., 1]
+    vx = vec_image[..., 2]
 
     # compute the in-plane versor length
     vxy_abs = np.sqrt(np.square(vx) + np.square(vy))
@@ -375,8 +377,8 @@ def orient_colormap(vec_volume):
     vxy_ang = np.divide(vxy_ang, np.pi)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=tuple(list(vec_volume_shape[:-1]) + [3]), dtype=np.uint8)
-    for z in range(vec_volume_shape[0]):
+    rgb_map = np.zeros(shape=tuple(list(vec_image_shape[:-1]) + [3]), dtype=np.uint8)
+    for z in range(vec_image_shape[0]):
 
         # generate colormap slice by slice
         h = vxy_ang[z]
@@ -451,13 +453,13 @@ def transform_axes(nd_array, flipped=None, swapped=None, expand=None):
     return nd_array
 
 
-def vector_colormap(vec_volume):
+def vector_colormap(vec_image):
     """
     Compute RGB colormap of orientation vector components from 3D vector field.
 
     Parameters
     ----------
-    vec_volume: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         n-dimensional array of orientation vectors
 
     Returns
@@ -466,19 +468,19 @@ def vector_colormap(vec_volume):
         orientation color map
     """
     # get input array shape
-    vec_volume_shape = vec_volume.shape
+    vec_image_shape = vec_image.shape
 
     # take absolute value
-    vec_volume = np.abs(vec_volume)
+    vec_image = np.abs(vec_image)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=vec_volume_shape, dtype=np.uint8)
-    for z in range(vec_volume_shape[0]):
+    rgb_map = np.zeros(shape=vec_image_shape, dtype=np.uint8)
+    for z in range(vec_image_shape[0]):
 
         # generate colormap slice by slice
-        image_r = vec_volume[z, :, :, 2]
-        image_g = vec_volume[z, :, :, 1]
-        image_b = vec_volume[z, :, :, 0]
+        image_r = vec_image[z, :, :, 2]
+        image_g = vec_image[z, :, :, 1]
+        image_b = vec_image[z, :, :, 0]
         rgb_map[z] = make_lupton_rgb(image_r, image_g, image_b, minimum=0, stretch=1, Q=8)
 
     return rgb_map

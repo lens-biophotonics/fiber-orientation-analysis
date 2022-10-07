@@ -148,7 +148,7 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     # compute the first order gradients
     gradient_list = np.gradient(scaled_image)
 
-    # compute the Hessian elements
+    # compute the Hessian matrix elements
     hessian_elements = [np.gradient(gradient_list[ax0], axis=ax1)
                         for ax0, ax1 in combinations_with_replacement(range(ndim), 2)]
 
@@ -156,7 +156,7 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     corr_factor = sigma ** 2
     hessian_elements = [corr_factor * element for element in hessian_elements]
 
-    # create Hessian matrix from Hessian elements
+    # create the Hessian matrix from its basic elements
     hessian = np.zeros((ndim, ndim) + scaled_image.shape, dtype=scaled_image.dtype)
     for index, (ax0, ax1) in enumerate(combinations_with_replacement(range(ndim), 2)):
         element = hessian_elements[index]
@@ -203,7 +203,7 @@ def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None,
     enhanced_array: numpy.ndarray (shape=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood function
     """
-    # Hessian estimation and eigenvalue decomposition
+    # Hessian matrix estimation and eigenvalue decomposition
     eigenvalues, eigenvectors = analyze_hessian_eigen(image, scale_px)
 
     # compute Frangi's vesselness probability
@@ -302,6 +302,7 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
 
     dark: bool
         if True, enhance black 3D tubular structures
+        (i.e., negative contrast polarity)
 
     Returns
     -------
@@ -344,7 +345,7 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
     return enhanced_array, fiber_vectors
 
 
-def reject_background(image, eigen2, eigen3, negative_contrast):
+def reject_background(image, eigen2, eigen3, dark):
     """
     Reject the fiber background, exploiting the sign of the "secondary"
     eigenvalues λ2 and λ3.
@@ -360,15 +361,16 @@ def reject_background(image, eigen2, eigen3, negative_contrast):
     eigen3: numpy.ndarray (shape=(Z,Y,X), dtype=float)
         highest Hessian eigenvalue
 
-    negative_contrast: bool
-        True for a negative contrast polarity
+    dark: bool
+        if True, enhance black 3D tubular structures
+        (i.e., negative contrast polarity)
 
     Returns
     -------
     image: numpy.ndarray (shape=(Z,Y,X))
         masked 3D image
     """
-    if negative_contrast:
+    if dark:
         image[eigen2 < 0] = 0
         image[eigen3 < 0] = 0
     else:
