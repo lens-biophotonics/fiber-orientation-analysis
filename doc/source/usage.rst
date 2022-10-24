@@ -22,14 +22,14 @@ The size (in MB) of these sub-volumes may be customized via the -m/--max-slice-s
 
 .. code-block:: console
 
-   (.foa3d_venv) $ python foa3d.py ../tpfm_mosaic/zetastitch.yml -m 200
+   $ python -m foa3d.py ../tpfm_mosaic/zetastitch.yml -m 200
 
 Furthermore, the values (in μm) of the lateral and longitudinal pixel size should be specified,
 along with the full width at half maximum of the optical system's point spread function:
 
 .. code-block:: console
 
-   (.foa3d_venv) $ ... --px-size-xy 0.4 --px-size-z 1 --psf-fwhm-x 1.5 --psf-fwhm-y 1.4 --psf-fwhm-z 3.1
+   $ ... --px-size-xy 0.4 --px-size-z 1 --psf-fwhm-x 1.5 --psf-fwhm-y 1.4 --psf-fwhm-z 3.1
 
 This information is employed at the preprocessing stage of the pipeline to isotropize the image spatial resolution,
 by blurring the coronal XY-plane of the sliced microscopy sub-volumes;
@@ -63,7 +63,7 @@ with an automatic contrast sensitivity:
 
 .. code-block:: console
 
-   (.foa3d_venv) $ ... -a 0.001 --b 10 -s 1.25 2.5
+   $ ... -a 0.001 --b 10 -s 1.25 2.5
 
 .. _somamask:
 
@@ -79,7 +79,7 @@ if required, the default neuronal fluorescence channel:
 
 .. code-block:: console
 
-   (.foa3d_venv) $ ... -n --ch-fiber 0 --ch-neuron 1
+   $ ... -n --ch-fiber 0 --ch-neuron 1
 
 .. _odf:
 
@@ -102,14 +102,14 @@ The multiscale estimation of fiber ODFs may be enabled by specifying a list of s
 
 .. code-block:: console
 
-   (.foa3d_venv) $ ... --odf-res 16 32 48
+   $ ... --odf-res 16 32 48
 
 The Foa3D tool also provides the possibility to repeat the fiber ODFs estimation, skipping the Frangi filtering stage,
 if a pre-estimated fiber orientation vector map is provided as input in place of the raw microscopy image volume:
 
 .. code-block:: console
 
-   (.foa3d_venv) $ python foa3d.py ../fiber_vec.h5 --odf-res 64
+   $ python -m foa3d.py ../fiber_vec.h5 --odf-res 64
 
 The fiber ODFs returned by the Foa3D tool may be accessed using the open source Mrtrix3 software package
 for medical image processing and visualization

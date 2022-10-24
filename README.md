@@ -16,10 +16,10 @@ https://lens-biophotonics.github.io/Foa3D/
 
 ## References
 
-Sorelli, M., Costantini, I., Mazzamuto, G., Bocchi, L., Axer, M., Pavone, F.
-S. (2022), Fiber enhancement and 3D orientation analysis in label-free
-two-photon fluorescence
-microscopy, bioarXiv, doi: insert DOI...
+Sorelli, M., Costantini, I., Bocchi, L., Axer, M., Pavone, F. S., Mazzamuto, G.
+(2022), Fiber enhancement and 3D orientation analysis in label-free
+two-photon fluorescence microscopy, bioRxiv.
+doi: [10.1101/2022.10.19.512531](https://doi.org/10.1101/2022.10.19.512531)
 
 Alimi, A., Deslauriers-Gauthier, S., Matuschke, F., Müller, A., Muenzing, S.,
 Axer, M., & Deriche, R. (2020). Analytical and fast fiber orientation
