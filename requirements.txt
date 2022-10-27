@@ -4,6 +4,10 @@
 #
 #    pip-compile requirements.in
 #
+about-time==3.1.1
+    # via alive-progress
+alive-progress==2.4.1
+    # via -r requirements.in
 astropy==5.1
     # via -r requirements.in
 contourpy==1.0.5
@@ -12,6 +16,8 @@ cycler==0.11.0
     # via matplotlib
 fonttools==4.37.4
     # via matplotlib
+grapheme==0.6.0
+    # via alive-progress
 h5py==3.7.0
     # via -r requirements.in
 imageio==2.22.1

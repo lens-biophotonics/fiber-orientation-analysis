@@ -290,7 +290,7 @@ def load_microscopy_image(cli_args):
         True for tiled microscopy reconstructions aligned using ZetaStitcher
     """
     # print heading
-    print(color_text(0, 191, 255, "\n  Microscopy Volume Image Import\n"))
+    print(color_text(0, 191, 255, "\nMicroscopy Volume Image Import\n"))
 
     # retrieve volume path and name
     image_path = cli_args.image_path
@@ -302,7 +302,7 @@ def load_microscopy_image(cli_args):
 
     # check input volume image format (ZetaStitcher .yml file)
     if len(split_fname) == 1:
-        raise ValueError('  Format must be specified for input volume images!')
+        raise ValueError('Format must be specified for input volume images!')
     else:
         image_format = split_fname[-1]
         if image_format == 'yml':
@@ -318,20 +318,20 @@ def load_microscopy_image(cli_args):
 
         # check dimensions
         if image.ndim != 4:
-            raise ValueError('  Invalid fiber orientation dataset (ndim != 4)')
+            raise ValueError('Invalid fiber orientation dataset (ndim != 4)')
         else:
             vector = True
-            print("  Loading " + image_name + " orientation dataset...\n")
+            print("Loading " + image_name + " orientation dataset...\n")
 
     # microscopy volume image
     else:
         # load tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
-            print("  Loading " + image_name + " tiled reconstruction...\n")
+            print("Loading " + image_name + " tiled reconstruction...\n")
             image = VirtualFusedVolume(image_path)
         # load z-stack
         else:
-            print("  Loading " + image_fname + " z-stack...\n")
+            print("Loading " + image_fname + " z-stack...\n")
             image_format = image_format.lower()
             if image_format == 'npy':
                 image = np.load(image_path)

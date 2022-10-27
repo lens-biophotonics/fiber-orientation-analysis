@@ -247,7 +247,8 @@ def config_frangi_slicing(image_shape, image_item_size, px_size, px_size_iso, sm
 
 def config_odf_slicing(fiber_vec_shape, fiber_vec_item_size, px_size_iso, odf_scale_um, max_slice_size=100.0):
     """
-    Description.
+    Slicing configuration for the iterative ODF analysis of basic chunks
+    of the 3D fiber orientation map returned by the Frangi filter stage.
 
     Parameters
     ----------

@@ -39,33 +39,6 @@ def color_text(r, g, b, text):
     return clr_text
 
 
-def print_analysis_time(start_time, tot_slices=None):
-    """
-    Print total analysis time.
-
-    Parameters
-    ----------
-    start_time: float
-        analysis start time
-
-    tot_slices: int
-        total number of analyzed image slices
-
-    Returns
-    -------
-    None
-    """
-    total, mins, secs = elapsed_time(start_time)
-
-    if tot_slices is not None:
-        mins_per_slice = (total / tot_slices) // 60
-        secs_per_slice = (total / tot_slices) % 60
-        print("\n\n  Process completed in: {0} min {1:3.1f} s ({2} min {3:3.1f} s per slice)\n"
-              .format(mins, secs, mins_per_slice, secs_per_slice))
-    else:
-        print("\n  Process completed in: {0} min {1:3.1f} s\n".format(mins, secs))
-
-
 def print_frangi_heading(alpha, beta, gamma, scales_um):
     """
     Print Frangi filter heading.
@@ -92,12 +65,12 @@ def print_frangi_heading(alpha, beta, gamma, scales_um):
     if gamma is None:
         gamma = 'auto'
 
-    print(color_text(0, 191, 255, "\n  3D Frangi Filter"))
-    print(u"\n  \u03B1: {0:.3f}\n  ".format(alpha)
-          + u"\u03B2: {0:.3f}\n  ".format(beta)
+    print(color_text(0, 191, 255, "\n3D Frangi Filter"))
+    print(u"\n\u03B1: {0:.3f}\n".format(alpha)
+          + u"\u03B2: {0:.3f}\n".format(beta)
           + u"\u03B3: {0}\n".format(gamma))
-    print("  Scales     [\u03BCm]: {}".format(scales_um))
-    print("  Diameters  [\u03BCm]: {}".format(4 * scales_um))
+    print("Scales     [\u03BCm]: {}".format(scales_um))
+    print("Diameters  [\u03BCm]: {}".format(4 * scales_um))
 
 
 def print_import_time(start_time):
@@ -114,7 +87,7 @@ def print_import_time(start_time):
     None
     """
     _, mins, secs = elapsed_time(start_time)
-    print("  Volume image loaded in: {0} min {1:3.1f} s".format(mins, secs))
+    print("Volume image loaded in: {0} min {1:3.1f} s".format(mins, secs))
 
 
 def print_odf_heading(odf_scales_um, odf_degrees):
@@ -133,9 +106,9 @@ def print_odf_heading(odf_scales_um, odf_degrees):
     -------
     None
     """
-    print(color_text(0, 191, 255, "\n  3D ODF Analysis"))
-    print("\n  Resolution   [\u03BCm]: {}".format(odf_scales_um))
-    print("  Expansion degrees: {}".format(odf_degrees))
+    print(color_text(0, 191, 255, "\n3D ODF Analysis"))
+    print("\nResolution   [\u03BCm]: {}".format(odf_scales_um))
+    print("Expansion degrees: {}".format(odf_degrees))
 
 
 def print_odf_supervoxel(voxel_shape, px_size_iso, odf_scale_um):
@@ -157,7 +130,7 @@ def print_odf_supervoxel(voxel_shape, px_size_iso, odf_scale_um):
     -------
     None
     """
-    print("\n  Super-voxel [\u03BCm]:\t{0} x {1} x {1}"
+    print("\nSuper-voxel [\u03BCm]:  {0} x {1} x {1}"
           .format(min(voxel_shape[0] * px_size_iso[0], odf_scale_um), odf_scale_um))
 
 
@@ -173,7 +146,7 @@ def print_pipeline_heading():
     -------
     None
     """
-    print("\n> " + color_text(0, 250, 154, "3D Fiber Orientation Analysis"))
+    print(color_text(0, 250, 154, "\n3D Fiber Orientation Analysis"))
 
 
 def print_prepro_heading():
@@ -188,7 +161,7 @@ def print_prepro_heading():
     -------
     None
     """
-    print(color_text(0, 191, 255, "\n\n  Microscopy Volume Image Preprocessing"), end='\r')
+    print(color_text(0, 191, 255, "\n\nMicroscopy Volume Image Preprocessing"), end='\r')
 
 
 def print_resolution(px_size, psf_fwhm):
@@ -207,28 +180,8 @@ def print_resolution(px_size, psf_fwhm):
     -------
     None
     """
-    print("  Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_size[0], px_size[1], px_size[2]))
-    print("  PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
-
-
-def print_slice_progress(count, tot):
-    """
-    Print fiber orientation analysis progress over the sliced sub-volumes.
-
-    Parameters
-    ----------
-    count: int
-        iteration count
-
-    tot: int
-        total number of iterations
-
-    Returns
-    -------
-    None
-    """
-    prc_progress = 100 * (count / tot)
-    print('  Processing slice {0}/{1}: {2:0.1f}%'.format(count, tot, prc_progress), end='\r')
+    print("Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_size[0], px_size[1], px_size[2]))
+    print("PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
 def print_slicing_info(image_shape_um, slice_shape_um, px_size, image_item_size):
@@ -265,14 +218,14 @@ def print_slicing_info(image_shape_um, slice_shape_um, px_size, image_item_size)
     max_slice_size = image_item_size * np.prod(np.divide(slice_shape_um, px_size))
 
     # print info
-    print("\n                                Z      Y      X")
-    print("  Total image shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+    print("\n                              Z      Y      X")
+    print("Total image shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(image_shape_um[0], image_shape_um[1], image_shape_um[2]))
-    print("  Total image size     [MB]: {0}\n"
+    print("Total image size     [MB]: {0}\n"
           .format(np.ceil(image_size / 1024**2).astype(int)))
-    print("  Basic slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+    print("Basic slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(slice_shape_um[0], slice_shape_um[1], slice_shape_um[2]))
-    print("  Basic slice size     [MB]: {0}\n"
+    print("Basic slice size     [MB]: {0}\n"
           .format(np.ceil(max_slice_size / 1024**2).astype(int)))
 
 
@@ -289,9 +242,9 @@ def print_soma_masking(lpf_soma_mask):
     None
     """
     if lpf_soma_mask:
-        print("  Lipofuscin-based soma masking: ON\n")
+        print("Lipofuscin-based soma masking: ON\n")
     else:
-        print("  Lipofuscin-based soma masking: OFF\n")
+        print("Lipofuscin-based soma masking: OFF\n")
 
 
 def print_image_shape(cli_args, image, mosaic):
@@ -327,6 +280,6 @@ def print_image_shape(cli_args, image, mosaic):
     image_shape = image.shape
     image_shape = np.delete(image_shape, channel_axis)
 
-    print("\n                                Z      Y      X")
-    print("  Image shape          [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+    print("\n                              Z      Y      X")
+    print("Image shape          [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(image_shape[0] * px_size_z, image_shape[1] * px_size_xy, image_shape[2] * px_size_xy))

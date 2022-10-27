@@ -22,7 +22,7 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         pixel size [μm]
 
     psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
-        3D PSF FWHM [μm]
+        3D PSF FWdHM [μm]
 
     Returns
     -------
@@ -57,9 +57,9 @@ def config_anisotropy_correction(px_size, psf_fwhm):
 
         # print preprocessing info
         gauss_sigma_um = np.multiply(smooth_sigma, px_size)
-        print(color_text(0, 191, 255, "\n  (lateral PSF degradation)"))
-        print("\n                                Z      Y      X")
-        print("  Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+        print(color_text(0, 191, 255, "\n(lateral PSF degradation)"))
+        print("\n                              Z      Y      X")
+        print("Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
               .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')
 
     # (no blurring)
@@ -68,9 +68,9 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         smooth_sigma = None
 
     # print pixel resize info
-    print("\n  Original pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+    print("\nOriginal pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
           .format(px_size[0], px_size[1], px_size[2]))
-    print("  Adjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})\n"
+    print("Adjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})\n"
           .format(px_size_iso[0], px_size_iso[1], px_size_iso[2]))
 
     return smooth_sigma, px_size_iso

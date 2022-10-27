@@ -1,16 +1,15 @@
 from os import mkdir, path
-from time import perf_counter
 
 import numpy as np
+from alive_progress import alive_bar
 
 from foa3d.frangi import config_frangi_scales, frangi_filter
 from foa3d.input import get_image_info
 from foa3d.odf import compute_scaled_odf, get_sph_harm_ncoeff
 from foa3d.output import save_array
 from foa3d.preprocessing import correct_image_anisotropy
-from foa3d.printing import (color_text, print_analysis_time,
-                            print_frangi_heading, print_odf_supervoxel,
-                            print_slice_progress, print_slicing_info,
+from foa3d.printing import (color_text, print_frangi_heading,
+                            print_odf_supervoxel, print_slicing_info,
                             print_soma_masking)
 from foa3d.slicing import (compute_slice_range, config_frangi_slicing,
                            config_odf_slicing, crop_slice, slice_channel)
@@ -195,7 +194,7 @@ def init_odf_arrays(vec_image_shape, save_dir, odf_degrees=6, odf_scale=15):
 def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir, image_name, max_slice_size=100.0,
                              scales_um=1.25, ch_neuron=0, ch_fiber=1, alpha=0.05, beta=1, gamma=100, dark=False,
                              z_min=0, z_max=None, orient_cmap=False, lpf_soma_mask=False, skeletonize=False,
-                             mosaic=False, verbose=True):
+                             mosaic=False):
     """
     Iteratively apply 3D Frangi filtering to basic TPFM image slices.
 
@@ -266,9 +265,6 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
     mosaic: bool
         must be True for tiled reconstructions aligned using ZetaStitcher
 
-    verbose: bool
-        verbosity flag
-
     Returns
     -------
     fiber_vec_image: HDF5 dataset (shape=(Z,Y,X,3), dtype=float32)
@@ -310,110 +306,99 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
     # compute the Frangi filter's scale values in pixel
     scales_px = config_frangi_scales(scales_um, px_size_iso[0])
 
-    # print info in verbose mode
-    if verbose:
-        # print Frangi filter configuration
-        print_frangi_heading(alpha, beta, gamma, scales_um)
+    # print Frangi filter configuration
+    print_frangi_heading(alpha, beta, gamma, scales_um)
 
-        # print iterative analysis information
-        print_slicing_info(image_shape_um, in_slice_shape_um, px_size, image_item_size)
+    # print iterative analysis information
+    print_slicing_info(image_shape_um, in_slice_shape_um, px_size, image_item_size)
 
-        # print neuron masking info
-        print_soma_masking(lpf_soma_mask)
+    # print neuron masking info
+    print_soma_masking(lpf_soma_mask)
 
     # iteratively apply Frangi filter to basic image slices
     loop_range = np.ceil(np.divide(image_shape, in_slice_shape)).astype(int)
-    total_iter = np.prod(loop_range)
-    loop_count = 1
-    tic = perf_counter()
-    for z in range(loop_range[0]):
+    total_iter = int(np.prod(loop_range))
+    with alive_bar(total_iter, title='Image slice') as bar:
+        for z in range(loop_range[0]):
 
-        for y in range(loop_range[1]):
+            for y in range(loop_range[1]):
 
-            for x in range(loop_range[2]):
+                for x in range(loop_range[2]):
 
-                # print progress
-                if verbose:
-                    print_slice_progress(loop_count, tot=total_iter)
+                    # index ranges of the analyzed fiber slice (with padding)
+                    rng_in, pad_mat = compute_slice_range(z, y, x, in_slice_shape, image_shape, pad_rng=pad)
 
-                # index ranges of the analyzed fiber slice (with padding)
-                rng_in, pad_mat = compute_slice_range(z, y, x, in_slice_shape, image_shape, pad_rng=pad)
+                    # output index ranges
+                    rng_out, _ = compute_slice_range(z, y, x, out_slice_shape, out_image_shape)
 
-                # output index ranges
-                rng_out, _ = compute_slice_range(z, y, x, out_slice_shape, out_image_shape)
+                    # slice fiber image slice
+                    fiber_slice = slice_channel(image, rng_in, channel=ch_fiber, mosaic=mosaic)
 
-                # slice fiber image slice
-                fiber_slice = slice_channel(image, rng_in, channel=ch_fiber, mosaic=mosaic)
+                    # skip background slice
+                    if np.max(fiber_slice) != 0:
 
-                # skip background slice
-                if np.max(fiber_slice) != 0:
+                        # preprocess fiber slice
+                        iso_fiber_slice = correct_image_anisotropy(fiber_slice, px_rsz_ratio,
+                                                                   sigma=smooth_sigma, pad_mat=pad_mat)
 
-                    # preprocess fiber slice
-                    iso_fiber_slice = correct_image_anisotropy(fiber_slice, px_rsz_ratio,
-                                                               sigma=smooth_sigma, pad_mat=pad_mat)
+                        # crop isotropized fiber slice
+                        iso_fiber_slice = crop_slice(iso_fiber_slice, rng_out)
 
-                    # crop isotropized fiber slice
-                    iso_fiber_slice = crop_slice(iso_fiber_slice, rng_out)
+                        # 3D Frangi filter
+                        frangi_slice, fiber_vec_slice \
+                            = frangi_filter(iso_fiber_slice, scales_px=scales_px,
+                                            alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
-                    # 3D Frangi filter
-                    frangi_slice, fiber_vec_slice \
-                        = frangi_filter(iso_fiber_slice, scales_px=scales_px,
-                                        alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+                        # generate RGB orientation color map
+                        if orient_cmap:
+                            orientcol_slice = orient_colormap(fiber_vec_slice)
+                        else:
+                            orientcol_slice = vector_colormap(fiber_vec_slice)
 
-                    # generate RGB orientation color map
-                    if orient_cmap:
-                        orientcol_slice = orient_colormap(fiber_vec_slice)
-                    else:
-                        orientcol_slice = vector_colormap(fiber_vec_slice)
+                        # mask background
+                        fiber_vec_slice, orientcol_slice, fiber_mask = \
+                            mask_background(frangi_slice, fiber_vec_slice, orientcol_slice, thresh_method='li',
+                                            skeletonize=skeletonize, invert_mask=False)
 
-                    # mask background
-                    fiber_vec_slice, orientcol_slice, fiber_mask = \
-                        mask_background(frangi_slice, fiber_vec_slice, orientcol_slice, thresh_method='li',
-                                        skeletonize=skeletonize, invert_mask=False)
+                        # (optional) neuronal body masking
+                        if lpf_soma_mask:
 
-                    # (optional) neuronal body masking
-                    if lpf_soma_mask:
+                            # neuron slice index ranges (without padding)
+                            rng_in, _ = compute_slice_range(z, y, x, in_slice_shape, image_shape)
 
-                        # neuron slice index ranges (without padding)
-                        rng_in, _ = compute_slice_range(z, y, x, in_slice_shape, image_shape)
+                            # slice neuron image slice
+                            neuron_slice = slice_channel(image, rng_in, channel=ch_neuron, mosaic=mosaic)
 
-                        # slice neuron image slice
-                        neuron_slice = slice_channel(image, rng_in, channel=ch_neuron, mosaic=mosaic)
+                            # resize neuron slice (lateral downsampling)
+                            iso_neuron_slice = correct_image_anisotropy(neuron_slice, px_rsz_ratio)
 
-                        # resize neuron slice (lateral downsampling)
-                        iso_neuron_slice = correct_image_anisotropy(neuron_slice, px_rsz_ratio)
+                            # crop isotropized neuron slice
+                            iso_neuron_slice = crop_slice(iso_neuron_slice, rng_out)
 
-                        # crop isotropized neuron slice
-                        iso_neuron_slice = crop_slice(iso_neuron_slice, rng_out)
+                            # mask neuronal bodies
+                            fiber_vec_slice, orientcol_slice, neuron_mask = \
+                                mask_background(iso_neuron_slice, fiber_vec_slice, orientcol_slice, thresh_method='yen',
+                                                skeletonize=False, invert_mask=True)
 
-                        # mask neuronal bodies
-                        fiber_vec_slice, orientcol_slice, neuron_mask = \
-                            mask_background(iso_neuron_slice, fiber_vec_slice, orientcol_slice, thresh_method='yen',
-                                            skeletonize=False, invert_mask=True)
+                            # fill neuron mask
+                            neuron_mask[rng_out] = (255 * neuron_mask[zsel, ...]).astype(np.uint8)
 
-                        # fill neuron mask
-                        neuron_mask[rng_out] = (255 * neuron_mask[zsel, ...]).astype(np.uint8)
+                        # fill output volumes
+                        vec_rng_out = tuple(np.append(rng_out, slice(0, 3, 1)))
+                        fiber_vec_image[vec_rng_out] = fiber_vec_slice[zsel, ...]
+                        fiber_vec_colmap[vec_rng_out] = orientcol_slice[zsel, ...]
+                        iso_fiber_image[rng_out] = iso_fiber_slice[zsel, ...].astype(np.uint8)
+                        frangi_image[rng_out] = (255 * frangi_slice[zsel, ...]).astype(np.uint8)
+                        fiber_mask[rng_out] = (255 * (1 - fiber_mask[zsel, ...])).astype(np.uint8)
 
-                    # fill output volumes
-                    vec_rng_out = tuple(np.append(rng_out, slice(0, 3, 1)))
-                    fiber_vec_image[vec_rng_out] = fiber_vec_slice[zsel, ...]
-                    fiber_vec_colmap[vec_rng_out] = orientcol_slice[zsel, ...]
-                    iso_fiber_image[rng_out] = iso_fiber_slice[zsel, ...].astype(np.uint8)
-                    frangi_image[rng_out] = (255 * frangi_slice[zsel, ...]).astype(np.uint8)
-                    fiber_mask[rng_out] = (255 * (1 - fiber_mask[zsel, ...])).astype(np.uint8)
-
-                # increase loop counter
-                loop_count += 1
-
-    # print total filtering time
-    if verbose:
-        print_analysis_time(tic, total_iter)
+                    # advance bar
+                    bar()
 
     return fiber_vec_image, fiber_vec_colmap, frangi_image, iso_fiber_image, fiber_mask, neuron_mask, tmp_file_lst
 
 
 def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir, max_slice_size=100.0, tmp_file_lst=[],
-                          odf_scale_um=15, odf_degrees=6, verbose=True):
+                          odf_scale_um=15, odf_degrees=6):
     """
     Iteratively estimate 3D fiber ODFs over basic orientation data chunks.
 
@@ -443,9 +428,6 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
 
     odf_degrees: int
         degrees of the spherical harmonics series expansion
-
-    verbose: bool
-        verbosity flag
 
     Returns
     -------
@@ -478,56 +460,47 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
 
     # iteratively apply Frangi filter to basic microscopy image slices
     loop_range = np.ceil(np.divide(vec_image_shape, vec_slice_shape)).astype(int)
-    total_iter = np.prod(loop_range)
-    loop_count = 1
-    tic = perf_counter()
-    for z in range(loop_range[0]):
+    total_iter = int(np.prod(loop_range))
+    with alive_bar(total_iter, title='Image slice') as bar:
+        for z in range(loop_range[0]):
 
-        for y in range(loop_range[1]):
+            for y in range(loop_range[1]):
 
-            for x in range(loop_range[2]):
+                for x in range(loop_range[2]):
 
-                # print progress
-                if verbose:
-                    print_slice_progress(loop_count, tot=total_iter)
+                    # input index ranges
+                    rng_in, _ = compute_slice_range(z, y, x, vec_slice_shape, vec_image_shape)
 
-                # input index ranges
-                rng_in, _ = compute_slice_range(z, y, x, vec_slice_shape, vec_image_shape)
+                    # ODF index ranges
+                    rng_odf, _ = compute_slice_range(x, y, z, np.flip(odf_slice_shape), odf_image_shape, flip=True)
 
-                # ODF index ranges
-                rng_odf, _ = compute_slice_range(x, y, z, np.flip(odf_slice_shape), odf_image_shape, flip=True)
+                    # load dataset slices to NumPy arrays, transform axes
+                    if iso_fiber_dset is None:
+                        iso_fiber_slice = None
+                    else:
+                        iso_fiber_slice = iso_fiber_dset[rng_in]
+                    rng_in = tuple(np.append(rng_in, slice(0, 3, 1)))
+                    vec_slice = fiber_vec_dset[rng_in]
 
-                # load dataset slices to NumPy arrays, transform axes
-                if iso_fiber_dset is None:
-                    iso_fiber_slice = None
-                else:
-                    iso_fiber_slice = iso_fiber_dset[rng_in]
-                rng_in = tuple(np.append(rng_in, slice(0, 3, 1)))
-                vec_slice = fiber_vec_dset[rng_in]
+                    # ODF analysis
+                    odf_slice, bg_mrtrix_slice = compute_scaled_odf(odf_scale, vec_slice, iso_fiber_slice,
+                                                                    odf_slice_shape, degrees=odf_degrees)
 
-                # ODF analysis
-                odf_slice, bg_mrtrix_slice, \
-                    = compute_scaled_odf(odf_scale, vec_slice, iso_fiber_slice, odf_slice_shape, degrees=odf_degrees)
+                    # transform axes
+                    odf_slice = transform_axes(odf_slice, swapped=(0, 2), flipped=(0, 1, 2))
+                    bg_mrtrix_slice = transform_axes(bg_mrtrix_slice, swapped=(0, 2), flipped=(0, 1, 2))
 
-                # transform axes
-                odf_slice = transform_axes(odf_slice, swapped=(0, 2), flipped=(0, 1, 2))
-                bg_mrtrix_slice = transform_axes(bg_mrtrix_slice, swapped=(0, 2), flipped=(0, 1, 2))
+                    # crop output slices
+                    odf_slice = crop_slice(odf_slice, rng_odf, flipped=(0, 1, 2))
+                    bg_mrtrix_slice = crop_slice(bg_mrtrix_slice, rng_odf, flipped=(0, 1, 2))
 
-                # crop output slices
-                odf_slice = crop_slice(odf_slice, rng_odf, flipped=(0, 1, 2))
-                bg_mrtrix_slice = crop_slice(bg_mrtrix_slice, rng_odf, flipped=(0, 1, 2))
+                    # fill datasets
+                    bg_mrtrix_image[rng_odf] = bg_mrtrix_slice
+                    rng_odf = tuple(np.append(rng_odf, slice(0, odf_slice.shape[-1], 1)))
+                    odf_image[rng_odf] = odf_slice
 
-                # fill datasets
-                bg_mrtrix_image[rng_odf] = bg_mrtrix_slice
-                rng_odf = tuple(np.append(rng_odf, slice(0, odf_slice.shape[-1], 1)))
-                odf_image[rng_odf] = odf_slice
-
-                # increase loop counter
-                loop_count += 1
-
-    # print total analysis time
-    if verbose:
-        print_analysis_time(tic, total_iter)
+                    # advance bar
+                    bar()
 
     return odf_image, bg_mrtrix_image, tmp_file_lst
 
@@ -610,7 +583,7 @@ def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, 
     None
     """
     # final print
-    print(color_text(0, 191, 255, "  Saving Frangi Filter Arrays...\n"))
+    print(color_text(0, 191, 255, "\nSaving Frangi Filter Arrays...\n"))
 
     # create subfolder
     save_dir = path.join(save_dir, 'frangi')
@@ -670,7 +643,7 @@ def save_odf_arrays(odf_lst, bg_mrtrix_lst, save_dir, image_name, odf_scales_um)
     None
     """
     # final print
-    print(color_text(0, 191, 255, "  Saving ODF Analysis Arrays...\n\n\n"))
+    print(color_text(0, 191, 255, "\nSaving ODF Analysis Arrays...\n\n\n"))
 
     # create ODF subfolder
     save_dir = path.join(save_dir, 'odf')

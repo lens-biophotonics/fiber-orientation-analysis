@@ -78,7 +78,7 @@ def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors
     elif degree == 10:
         real_sph_harm = sph_harm_degree_10(order, phi, sin_theta, cos_theta, norm_factors[5, :])
     else:
-        raise(ValueError("\n  Invalid degree of the spherical harmonics series expansion!!!"))
+        raise ValueError("\n  Invalid degree of the spherical harmonics series expansion!!!")
 
     return real_sph_harm
 
@@ -167,20 +167,23 @@ def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_
 
     # impose a relative threshold on zero orientation vectors
     ref_vxl_size = min(vxl_side, fiber_vec_image.shape[0]) * vxl_side**2
-    for z in range(0, fiber_vec_image.shape[0], vxl_side):
+
+    # total iterations
+    fiber_vec_image_shape = np.array(fiber_vec_image.shape)
+    for z in range(fiber_vec_image_shape[0], vxl_side):
         zmax = z + vxl_side
-        if zmax >= fiber_vec_image.shape[0]:
-            zmax = fiber_vec_image.shape[0]
+        if zmax >= fiber_vec_image_shape[0]:
+            zmax = fiber_vec_image_shape[0]
 
-        for y in range(0, fiber_vec_image.shape[1], vxl_side):
+        for y in range(fiber_vec_image_shape[1], vxl_side):
             ymax = y + vxl_side
-            if ymax >= fiber_vec_image.shape[1]:
-                ymax = fiber_vec_image.shape[1]
+            if ymax >= fiber_vec_image_shape[1]:
+                ymax = fiber_vec_image_shape[1]
 
-            for x in range(0, fiber_vec_image.shape[2], vxl_side):
+            for x in range(fiber_vec_image_shape[2], vxl_side):
                 xmax = x + vxl_side
-                if xmax >= fiber_vec_image.shape[2]:
-                    xmax = fiber_vec_image.shape[2]
+                if xmax >= fiber_vec_image_shape[2]:
+                    xmax = fiber_vec_image_shape[2]
 
                 # slice vector voxel (skip boundary voxels)
                 vec_vxl = fiber_vec_image[z:zmax, y:ymax, x:xmax, :]
