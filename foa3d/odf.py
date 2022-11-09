@@ -2,6 +2,8 @@ import numpy as np
 from numba import njit
 from skimage.transform import resize
 
+from foa3d.utils import normalize_image
+
 
 @njit(cache=True)
 def compute_fiber_angles(fiber_vec_array, norm):
@@ -125,7 +127,7 @@ def compute_scaled_odf(odf_scale, fiber_vec_image, iso_fiber_array, odf_patch_sh
     return odf, bg_mrtrix
 
 
-def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=-1):
+def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -147,9 +149,6 @@ def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_
     vxl_thr: float
         minimum relative threshold on the sliced voxel volume
 
-    vec_thr: float
-        minimum relative threshold on non-zero orientation vectors
-
     Returns
     -------
     odf: numpy.ndarray (shape=(Z,Y,X,ncoeff), dtype=float32)
@@ -170,27 +169,19 @@ def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_
 
     # total iterations
     fiber_vec_image_shape = np.array(fiber_vec_image.shape)
-    for z in range(fiber_vec_image_shape[0], vxl_side):
+    for z in range(0, fiber_vec_image_shape[0], vxl_side):
         zmax = z + vxl_side
-        if zmax >= fiber_vec_image_shape[0]:
-            zmax = fiber_vec_image_shape[0]
 
-        for y in range(fiber_vec_image_shape[1], vxl_side):
+        for y in range(0, fiber_vec_image_shape[1], vxl_side):
             ymax = y + vxl_side
-            if ymax >= fiber_vec_image_shape[1]:
-                ymax = fiber_vec_image_shape[1]
 
-            for x in range(fiber_vec_image_shape[2], vxl_side):
+            for x in range(0, fiber_vec_image_shape[2], vxl_side):
                 xmax = x + vxl_side
-                if xmax >= fiber_vec_image_shape[2]:
-                    xmax = fiber_vec_image_shape[2]
 
                 # slice vector voxel (skip boundary voxels)
                 vec_vxl = fiber_vec_image[z:zmax, y:ymax, x:xmax, :]
-                nonzero_vecs = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
-                if sli_vxl_size / ref_vxl_size > vxl_thr and \
-                   nonzero_vecs / sli_vxl_size > vec_thr:
+                if sli_vxl_size / ref_vxl_size > vxl_thr:
                     odf[z // vxl_side, y // vxl_side, x // vxl_side, :] \
                         = fiber_vectors_to_sph_harm(vec_vxl.ravel(), degrees, norm_factors)
 
@@ -328,13 +319,17 @@ def generate_odf_background(bg_image, vxl_side):
     # get shape of new downsampled array
     new_shape = tuple(np.ceil(np.divide(bg_image.shape[:3],  vxl_side)).astype(int))
 
+    # normalize
+    dims = bg_image.ndim
+    if dims == 3:
+        bg_image = normalize_image(bg_image)
+
     # loop over z-slices, and resize them
     bg_mrtrix = np.zeros(new_shape, dtype=np.uint8)
-    dims = bg_image.ndim
     z_out = 0
     for z in range(0, bg_image.shape[0], vxl_side):
         if dims == 3:
-            tmp_slice = bg_image[z, ...].copy()
+            tmp_slice = np.mean(bg_image[z:z + vxl_side, ...].copy(), axis=0)
         elif dims == 4:
             tmp_slice = 255.0 * np.sum(np.abs(bg_image[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)

@@ -487,8 +487,8 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
                                                                     odf_slice_shape, degrees=odf_degrees)
 
                     # transform axes
-                    odf_slice = transform_axes(odf_slice, swapped=(0, 2), flipped=(0, 1, 2))
-                    bg_mrtrix_slice = transform_axes(bg_mrtrix_slice, swapped=(0, 2), flipped=(0, 1, 2))
+                    odf_slice = transform_axes(odf_slice, swapped=(0, 2), flipped=(1, 2))
+                    bg_mrtrix_slice = transform_axes(bg_mrtrix_slice, swapped=(0, 2), flipped=(1, 2))
 
                     # crop output slices
                     odf_slice = crop_slice(odf_slice, rng_odf, flipped=(0, 1, 2))

@@ -315,7 +315,7 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
     # check image dimensions
     dims = image.ndim
     if not dims == 3:
-        raise(ValueError("  Only 3D images are supported!!!"))
+        raise ValueError("  Only 3D images are supported!!!")
 
     # single-scale vesselness analysis
     n_scales = len(scales_px)
