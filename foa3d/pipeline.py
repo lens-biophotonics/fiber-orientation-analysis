@@ -318,7 +318,7 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
     # iteratively apply Frangi filter to basic image slices
     loop_range = np.ceil(np.divide(image_shape, in_slice_shape)).astype(int)
     total_iter = int(np.prod(loop_range))
-    with alive_bar(total_iter, title='Image slice') as bar:
+    with alive_bar(total_iter, title='Image slice', length=33) as bar:
         for z in range(loop_range[0]):
 
             for y in range(loop_range[1]):
@@ -356,7 +356,7 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                             orientcol_slice = vector_colormap(fiber_vec_slice)
 
                         # mask background
-                        fiber_vec_slice, orientcol_slice, fiber_mask = \
+                        fiber_vec_slice, orientcol_slice, fiber_mask_slice = \
                             mask_background(frangi_slice, fiber_vec_slice, orientcol_slice, thresh_method='li',
                                             skeletonize=skeletonize, invert_mask=False)
 
@@ -376,12 +376,12 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                             iso_neuron_slice = crop_slice(iso_neuron_slice, rng_out)
 
                             # mask neuronal bodies
-                            fiber_vec_slice, orientcol_slice, neuron_mask = \
+                            fiber_vec_slice, orientcol_slice, neuron_mask_slice = \
                                 mask_background(iso_neuron_slice, fiber_vec_slice, orientcol_slice, thresh_method='yen',
                                                 skeletonize=False, invert_mask=True)
 
                             # fill neuron mask
-                            neuron_mask[rng_out] = (255 * neuron_mask[zsel, ...]).astype(np.uint8)
+                            neuron_mask[rng_out] = (255 * neuron_mask_slice[zsel, ...]).astype(np.uint8)
 
                         # fill output volumes
                         vec_rng_out = tuple(np.append(rng_out, slice(0, 3, 1)))
@@ -389,7 +389,7 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                         fiber_vec_colmap[vec_rng_out] = orientcol_slice[zsel, ...]
                         iso_fiber_image[rng_out] = iso_fiber_slice[zsel, ...].astype(np.uint8)
                         frangi_image[rng_out] = (255 * frangi_slice[zsel, ...]).astype(np.uint8)
-                        fiber_mask[rng_out] = (255 * (1 - fiber_mask[zsel, ...])).astype(np.uint8)
+                        fiber_mask[rng_out] = (255 * (1 - fiber_mask_slice[zsel, ...])).astype(np.uint8)
 
                     # advance bar
                     bar()
@@ -461,7 +461,7 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
     # iteratively apply Frangi filter to basic microscopy image slices
     loop_range = np.ceil(np.divide(vec_image_shape, vec_slice_shape)).astype(int)
     total_iter = int(np.prod(loop_range))
-    with alive_bar(total_iter, title='Image slice') as bar:
+    with alive_bar(total_iter, title='Image slice', length=33) as bar:
         for z in range(loop_range[0]):
 
             for y in range(loop_range[1]):
