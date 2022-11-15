@@ -127,7 +127,7 @@ def compute_scaled_odf(odf_scale, fiber_vec_image, iso_fiber_array, odf_patch_sh
     return odf, bg_mrtrix
 
 
-def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5):
+def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=-1):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -149,6 +149,9 @@ def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_
     vxl_thr: float
         minimum relative threshold on the sliced voxel volume
 
+    vec_thr: float
+        minimum relative threshold on non-zero orientation vectors
+
     Returns
     -------
     odf: numpy.ndarray (shape=(Z,Y,X,ncoeff), dtype=float32)
@@ -164,11 +167,9 @@ def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_
     # compute spherical harmonics normalization factors (once)
     norm_factors = get_sph_harm_norm_factors(degrees)
 
-    # impose a relative threshold on zero orientation vectors
-    ref_vxl_size = min(vxl_side, fiber_vec_image.shape[0]) * vxl_side**2
-
     # total iterations
     fiber_vec_image_shape = np.array(fiber_vec_image.shape)
+    ref_vxl_size = min(vxl_side, fiber_vec_image_shape[0]) * vxl_side**2
     for z in range(0, fiber_vec_image_shape[0], vxl_side):
         zmax = z + vxl_side
 
@@ -178,10 +179,12 @@ def estimate_odf_coeff(fiber_vec_image, odf_slice_shape, vxl_side, degrees, vxl_
             for x in range(0, fiber_vec_image_shape[2], vxl_side):
                 xmax = x + vxl_side
 
-                # slice vector voxel (skip boundary voxels)
+                # slice vector voxel (skip boundary voxels and voxels without enough non-zero orientation vectors)
                 vec_vxl = fiber_vec_image[z:zmax, y:ymax, x:xmax, :]
+                zero_vecs = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
-                if sli_vxl_size / ref_vxl_size > vxl_thr:
+                if sli_vxl_size / ref_vxl_size > vxl_thr and \
+                   1 - zero_vecs / sli_vxl_size > vec_thr:
                     odf[z // vxl_side, y // vxl_side, x // vxl_side, :] \
                         = fiber_vectors_to_sph_harm(vec_vxl.ravel(), degrees, norm_factors)
 
