@@ -197,11 +197,14 @@ def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None,
 
     Returns
     -------
+    enhanced_array: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+        Frangi's vesselness likelihood function
+
     eigenvectors: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         3D orientation map
 
-    enhanced_array: numpy.ndarray (shape=(Z,Y,X), dtype=float)
-        Frangi's vesselness likelihood function
+    eigenvalues: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+        structure tensor eigenvalues
     """
     # Hessian matrix estimation and eigenvalue decomposition
     eigenvalues, eigenvectors = analyze_hessian_eigen(image, scale_px)
@@ -209,7 +212,7 @@ def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None,
     # compute Frangi's vesselness probability
     enhanced_array = compute_scaled_vesselness(*eigenvalues, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
-    return eigenvectors, enhanced_array
+    return enhanced_array, eigenvectors, eigenvalues
 
 
 def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
@@ -311,6 +314,9 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
 
     fiber_vectors: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         3D fiber orientation map
+
+    eigenvalues: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+        structure tensor eigenvalues (best local spatial scale)
     """
     # check image dimensions
     dims = image.ndim
@@ -320,7 +326,7 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
     # single-scale vesselness analysis
     n_scales = len(scales_px)
     if n_scales == 1:
-        fiber_vectors, enhanced_array \
+        enhanced_array, fiber_vectors, eigenvalues \
             = compute_scaled_orientation(scales_px[0], image, alpha=alpha, beta=beta, gamma=gamma,  dark=dark)
 
     # parallel scaled vesselness analysis
@@ -329,7 +335,8 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
             = partial(compute_scaled_orientation, image=image, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
         with mp.Pool(n_scales) as p:
-            eigenvectors_list, enhanced_array_list = zip(*p.map(par_compute_orientation, scales_px))
+            enhanced_array_list, eigenvectors_list, eigenvalues_list = zip(*p.map(par_compute_orientation, scales_px))
+        eigenvalues = np.stack(eigenvalues_list, axis=0)
         eigenvectors = np.stack(eigenvectors_list, axis=0)
         enhanced_array = np.stack(enhanced_array_list, axis=0)
 
@@ -338,11 +345,13 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
         best_idx = np.expand_dims(best_idx, axis=0)
         enhanced_array = np.take_along_axis(enhanced_array, best_idx, axis=0).squeeze(axis=0)
 
-        # select dominant eigenvalues (and associated eigenvectors)
+        # select fiber orientation vectors among different scales (and the associated eigenvalues)
         best_idx = np.expand_dims(best_idx, axis=-1)
+        eigenvalues = np.moveaxis(eigenvalues, 1, -1)
+        eigenvalues = np.take_along_axis(eigenvalues, best_idx, axis=0).squeeze(axis=0)
         fiber_vectors = np.take_along_axis(eigenvectors, best_idx, axis=0).squeeze(axis=0)
 
-    return enhanced_array, fiber_vectors
+    return enhanced_array, fiber_vectors, eigenvalues
 
 
 def reject_background(image, eigen2, eigen3, dark):

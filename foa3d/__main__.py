@@ -16,7 +16,7 @@ def foa3d(cli_args):
 
     # iteratively apply 3D Frangi-based fiber enhancement to basic image slices
     if not skip_frangi:
-        fiber_vec_image, fiber_vec_colmap, frangi_image, \
+        fiber_vec_image, fiber_vec_colmap, frac_anis_image, frangi_image, \
             iso_fiber_image, fiber_mask, neuron_mask, tmp_file_lst \
             = iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir, image_name,
                                        max_slice_size=max_slice_size, alpha=alpha, beta=beta, gamma=gamma,
@@ -24,7 +24,8 @@ def foa3d(cli_args):
                                        ch_neuron=ch_neuron, ch_fiber=ch_fiber, mosaic=mosaic)
 
         # save Frangi filtering arrays to TIF files
-        save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, save_dir, image_name)
+        save_frangi_arrays(fiber_vec_colmap, frac_anis_image, frangi_image, fiber_mask, neuron_mask,
+                           save_dir, image_name)
 
     # estimate 3D fiber ODF maps iterating over the input list of ODF scales
     if odf_scales_um:

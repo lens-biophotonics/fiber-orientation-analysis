@@ -2,6 +2,7 @@ from os import mkdir, path
 
 import numpy as np
 from alive_progress import alive_bar
+from numba import njit
 
 from foa3d.frangi import config_frangi_scales, frangi_filter
 from foa3d.input import get_image_info
@@ -16,6 +17,31 @@ from foa3d.slicing import (compute_slice_range, config_frangi_slicing,
 from foa3d.utils import (create_background_mask, create_hdf5_file,
                          get_item_bytes, orient_colormap, transform_axes,
                          vector_colormap)
+
+
+@njit(cache=True)
+def compute_fractional_anisotropy(eigenval):
+    """
+    Compute structure tensor fractional anisotropy
+    as in Schilling et al. (2018).
+
+    Parameters
+    ----------
+    eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+        structure tensor eigenvalues (best local spatial scale)
+
+    Returns
+    -------
+    frac_anis: numpy.ndarray (shape=(3,), dtype=float)
+        fractional anisotropy
+    """
+    frac_anis = \
+        np.sqrt(0.5 * np.divide((eigenval[..., 0] - eigenval[..., 1]) ** 2 +
+                                (eigenval[..., 0] - eigenval[..., 2]) ** 2 +
+                                (eigenval[..., 1] - eigenval[..., 2]) ** 2,
+                                np.sum(eigenval ** 2, axis=-1)))
+
+    return frac_anis
 
 
 def init_frangi_arrays(image_shape, slice_shape, resize_ratio, save_dir, image_name,
@@ -56,6 +82,9 @@ def init_frangi_arrays(image_shape, slice_shape, resize_ratio, save_dir, image_n
 
     fiber_vec_colmap: HDF5 dataset (shape=(Z,Y,X,3), dtype=uint8)
         initialized orientation colormap image
+
+    frac_anis_image: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        initialized fractional anisotropy image
 
     frangi_image: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
         initialized Frangi-enhanced image
@@ -113,6 +142,10 @@ def init_frangi_arrays(image_shape, slice_shape, resize_ratio, save_dir, image_n
     fiber_mask_file, fiber_mask = create_hdf5_file(fiber_mask_path, dset_shape, slice_shape, dtype='uint8')
     tmp_hdf5_lst.append({'path': fiber_mask_path, 'obj': fiber_mask_file})
 
+    frac_anis_path = path.join(save_dir, 'frac_anis_' + image_name + '.h5')
+    frac_anis_file, frac_anis_image = create_hdf5_file(frac_anis_path, dset_shape, slice_shape, dtype='uint8')
+    tmp_hdf5_lst.append({'path': frac_anis_path, 'obj': frac_anis_file})
+
     # neuron channel
     if lpf_soma_mask:
         neuron_mask_path = path.join(save_dir, 'neuron_msk_' + image_name + '.h5')
@@ -133,7 +166,8 @@ def init_frangi_arrays(image_shape, slice_shape, resize_ratio, save_dir, image_n
     orientcol_file, fiber_vec_colmap = create_hdf5_file(orientcol_path, vec_dset_shape, vec_chunk_shape, dtype='uint8')
     tmp_hdf5_lst.append({'path': orientcol_path, 'obj': orientcol_file})
 
-    return fiber_vec_image, fiber_vec_colmap, frangi_image, fiber_mask, iso_fiber_image, neuron_mask, zsel, tmp_hdf5_lst
+    return fiber_vec_image, fiber_vec_colmap, frac_anis_image, frangi_image, fiber_mask, iso_fiber_image, neuron_mask, \
+        zsel, tmp_hdf5_lst
 
 
 def init_odf_arrays(vec_image_shape, save_dir, odf_degrees=6, odf_scale=15):
@@ -273,6 +307,9 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
     fiber_vec_colmap: HDF5 dataset (shape=(Z,Y,X,3), dtype=uint8)
         orientation colormap image
 
+    frac_anis_image: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        fractional anisotropy image
+
     frangi_image: HDF5 dataset (shape=(Z,Y,X,3), dtype=uint8)
         Frangi-enhanced volume image (fiber probability volume)
 
@@ -298,7 +335,7 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                               max_slice_size=max_slice_size)
 
     # initialize the output volume arrays
-    fiber_vec_image, fiber_vec_colmap, frangi_image, fiber_mask, \
+    fiber_vec_image, fiber_vec_colmap, frac_anis_image, frangi_image, fiber_mask, \
         iso_fiber_image, neuron_mask, zsel, tmp_file_lst = \
         init_frangi_arrays(image_shape, out_slice_shape, px_rsz_ratio, save_dir, image_name,
                            z_min=z_min, z_max=z_max, lpf_soma_mask=lpf_soma_mask)
@@ -345,9 +382,12 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                         iso_fiber_slice = crop_slice(iso_fiber_slice, rng_out)
 
                         # 3D Frangi filter
-                        frangi_slice, fiber_vec_slice \
+                        frangi_slice, fiber_vec_slice, eigenval_slice \
                             = frangi_filter(iso_fiber_slice, scales_px=scales_px,
                                             alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+
+                        # generate fractional anisotropy image
+                        frac_anis_slice = compute_fractional_anisotropy(eigenval_slice)
 
                         # generate RGB orientation color map
                         if orient_cmap:
@@ -357,8 +397,8 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
 
                         # mask background
                         fiber_vec_slice, orientcol_slice, fiber_mask_slice = \
-                            mask_background(frangi_slice, fiber_vec_slice, orientcol_slice, thresh_method='li',
-                                            skeletonize=skeletonize, invert_mask=False)
+                            mask_background(frangi_slice, fiber_vec_slice, orientcol_slice,
+                                            thresh_method='li', skeletonize=skeletonize, invert_mask=False)
 
                         # (optional) neuronal body masking
                         if lpf_soma_mask:
@@ -376,9 +416,9 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                             iso_neuron_slice = crop_slice(iso_neuron_slice, rng_out)
 
                             # mask neuronal bodies
-                            fiber_vec_slice, orientcol_slice, neuron_mask_slice = \
-                                mask_background(iso_neuron_slice, fiber_vec_slice, orientcol_slice, thresh_method='yen',
-                                                skeletonize=False, invert_mask=True)
+                            fiber_vec_slice, orientcol_slice, frac_anis_slice, neuron_mask_slice = \
+                                mask_background(iso_neuron_slice, fiber_vec_slice, orientcol_slice, frac_anis_slice,
+                                                thresh_method='yen', skeletonize=False, invert_mask=True)
 
                             # fill neuron mask
                             neuron_mask[rng_out] = (255 * neuron_mask_slice[zsel, ...]).astype(np.uint8)
@@ -388,13 +428,15 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                         fiber_vec_image[vec_rng_out] = fiber_vec_slice[zsel, ...]
                         fiber_vec_colmap[vec_rng_out] = orientcol_slice[zsel, ...]
                         iso_fiber_image[rng_out] = iso_fiber_slice[zsel, ...].astype(np.uint8)
+                        frac_anis_image[rng_out] = (255 * frac_anis_slice[zsel, ...]).astype(np.uint8)
                         frangi_image[rng_out] = (255 * frangi_slice[zsel, ...]).astype(np.uint8)
                         fiber_mask[rng_out] = (255 * (1 - fiber_mask_slice[zsel, ...])).astype(np.uint8)
 
                     # advance bar
                     bar()
 
-    return fiber_vec_image, fiber_vec_colmap, frangi_image, iso_fiber_image, fiber_mask, neuron_mask, tmp_file_lst
+    return fiber_vec_image, fiber_vec_colmap, frac_anis_image, frangi_image, iso_fiber_image, fiber_mask, neuron_mask, \
+        tmp_file_lst
 
 
 def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir, max_slice_size=100.0, tmp_file_lst=[],
@@ -505,7 +547,8 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
     return odf_image, bg_mrtrix_image, tmp_file_lst
 
 
-def mask_background(image, fiber_vec_slice, orientcol_slice, thresh_method='yen', skeletonize=False, invert_mask=False):
+def mask_background(image, fiber_vec_slice, orientcol_slice, frac_anis_slice=None,
+                    thresh_method='yen', skeletonize=False, invert_mask=False):
     """
     Mask orientation volume arrays.
 
@@ -519,6 +562,9 @@ def mask_background(image, fiber_vec_slice, orientcol_slice, thresh_method='yen'
 
     orientcol_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
         orientation colormap slice
+
+    frac_anis_slice: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+        fractional anisotropy slice
 
     thresh_method: str
         thresholding method (refer to skimage.filters)
@@ -537,6 +583,9 @@ def mask_background(image, fiber_vec_slice, orientcol_slice, thresh_method='yen'
     orientcol_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
         orientation colormap patch (masked)
 
+    frac_anis_slice: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+        fractional anisotropy patch (masked)
+
     background_mask: numpy.ndarray (shape=(Z,Y,X), dtype=bool)
         background mask
     """
@@ -547,14 +596,20 @@ def mask_background(image, fiber_vec_slice, orientcol_slice, thresh_method='yen'
     if invert_mask:
         background = np.logical_not(background)
 
-    # apply mask to orientation arrays
+    # apply mask to input arrays
     fiber_vec_slice[background, :] = 0
     orientcol_slice[background, :] = 0
 
-    return fiber_vec_slice, orientcol_slice, background
+    # (optional) mask fractional anisotropy
+    if frac_anis_slice is not None:
+        frac_anis_slice[background] = 0
+        return fiber_vec_slice, orientcol_slice, frac_anis_slice, background
+
+    else:
+        return fiber_vec_slice, orientcol_slice, background
 
 
-def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, save_dir, image_name):
+def save_frangi_arrays(fiber_vec_colmap, frac_anis_image, frangi_image, fiber_mask, neuron_mask, save_dir, image_name):
     """
     Save the output arrays of the Frangi filter stage to TIF files.
 
@@ -562,6 +617,9 @@ def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, 
     ----------
     fiber_vec_colmap: HDF5 dataset (shape=(Z,Y,X,3), dtype: uint8)
         orientation colormap image
+
+    frac_anis_image: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        fractional anisotropy image
 
     frangi_image: HDF5 dataset (shape=(Z,Y,X), dtype: uint8)
         Frangi-enhanced volume image (fiber probability volume)
@@ -592,6 +650,9 @@ def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, 
 
     # save orientation color map to TIF
     save_array('fiber_cmap_' + image_name, save_dir, fiber_vec_colmap)
+
+    # save fractional anisotropy map to TIF
+    save_array('frac_anis_' + image_name, save_dir, frac_anis_image)
 
     # save Frangi-enhanced fiber volume to TIF
     save_array('frangi_' + image_name, save_dir, frangi_image)
