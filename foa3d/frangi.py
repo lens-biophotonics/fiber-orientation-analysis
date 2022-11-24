@@ -63,7 +63,8 @@ def compute_dominant_eigen(hessian):
     dominant_eigenvec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         Hessian eigenvectors related to the dominant (minimum) eigenvalue
     """
-    # compute and sort the eigenvalues/eigenvectors
+    # compute and sort the eigenvalues/eigenvectors                            NOTE: evaluate the substitution with
+    #                                                                                scipy.linalg.eigh (eigenvalues are already ordered!)
     # of the image Hessian matrices
     eigenval, eigenvec = np.linalg.eigh(hessian)
     sorted_eigenval, sorted_eigenvec = sort_eigen(eigenval, eigenvec)

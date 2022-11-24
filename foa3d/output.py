@@ -36,7 +36,7 @@ def create_save_dir(image_path):
     return save_dir
 
 
-def save_array(fname, save_dir, nd_array, format='tif'):
+def save_array(fname, save_dir, nd_array, format='tif', odi=False):
     """
     Save array to file.
 
@@ -54,13 +54,19 @@ def save_array(fname, save_dir, nd_array, format='tif'):
     format: str
         output format
 
+    odi: bool
+        True when saving the ODI maps
+
     Returns
     -------
     None
     """
     format = format.lower()
     if format == 'tif' or format == 'tiff':
-        tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array)
+        if odi:
+            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True, metadata={'axes': 'ZYX'})
+        else:
+            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array)
     elif format == 'npy':
         np.save(path.join(save_dir, fname + '.npy'), nd_array)
     elif format == 'nii':

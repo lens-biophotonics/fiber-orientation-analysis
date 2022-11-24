@@ -98,7 +98,7 @@ def init_frangi_arrays(image_shape, slice_shape, resize_ratio, save_dir, image_n
     neuron_mask: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
         initialized neuron mask image
 
-    zsel: NumPy slice object
+    zsel: NumPy sli object
         selected z-depth range
 
     tmp_hdf5_lst: list
@@ -170,14 +170,17 @@ def init_frangi_arrays(image_shape, slice_shape, resize_ratio, save_dir, image_n
         zsel, tmp_hdf5_lst
 
 
-def init_odf_arrays(vec_image_shape, save_dir, odf_degrees=6, odf_scale=15):
+def init_odf_arrays(vec_img_shape, odf_slc_shape, save_dir, odf_degrees=6, odf_scale=15):
     """
     Initialize the output datasets of the ODF analysis stage.
 
     Parameters
     ----------
-    vec_image_shape: ndarray (shape=(3,), dtype=int)
+    vec_img_shape: numpy.ndarray (shape=(3,), dtype=int)
         vector volume shape [px]
+
+    odf_slc_shape: numpy.ndarray (shape=(3,), dtype=int)
+        odf slice shape [px]
 
     save_dir: str
         saving directory string path
@@ -190,11 +193,29 @@ def init_odf_arrays(vec_image_shape, save_dir, odf_degrees=6, odf_scale=15):
 
     Returns
     -------
-    odf_image: HDF5 dataset (shape=(X,Y,Z,3), dtype=float32)
+    odf_img: HDF5 dataset (shape=(X,Y,Z,3), dtype=float32)
         initialized dataset of ODF spherical harmonics coefficients
 
-    bg_mrtrix_image: HDF5 dataset (shape=(X,Y,Z), dtype=uint8)
+    bg_mrtrix_img: HDF5 dataset (shape=(X,Y,Z), dtype=uint8)
         initialized background dataset for ODF visualization in Mrtrix3
+
+    odi_pri_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of primary orientation dispersion parameters
+    
+    odi_sec_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of secondary orientation dispersion parameters
+    
+    odi_tot_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of total orientation dispersion parameters
+    
+    odi_anis_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of orientation dispersion anisotropy parameters
+    
+    odf_shape: tuple
+        ODF image shape
+    
+    odi_shape: tuple
+        ODI parameter images shape
 
     odf_tmp_files: list
         list of dictionaries of temporary HDF5 files (file objects and paths)
@@ -205,10 +226,9 @@ def init_odf_arrays(vec_image_shape, save_dir, odf_degrees=6, odf_scale=15):
         mkdir(save_dir)
 
     # initialize downsampled background image dataset (HDF5 file)
-    bg_shape = np.flip(np.ceil(np.divide(vec_image_shape, odf_scale))).astype(int)
-
+    bg_shape = np.flip(np.ceil(np.divide(vec_img_shape, odf_scale))).astype(int)
     bg_tmp_path = path.join(save_dir, 'bg_tmp{}.h5'.format(odf_scale))
-    bg_tmp_file, bg_mrtrix_image \
+    bg_tmp_file, bg_mrtrix_img \
         = create_hdf5_file(bg_tmp_path, bg_shape, tuple(np.append(bg_shape[:2], 1)), dtype='uint8')
     bg_tmp_dict = {'path': bg_tmp_path, 'obj': bg_tmp_file}
 
@@ -216,13 +236,32 @@ def init_odf_arrays(vec_image_shape, save_dir, odf_degrees=6, odf_scale=15):
     num_coeff = get_sph_harm_ncoeff(odf_degrees)
     odf_shape = tuple(list(bg_shape) + [num_coeff])
     odf_tmp_path = path.join(save_dir, 'odf_tmp{}.h5'.format(odf_scale))
-    odf_tmp_file, odf_image = create_hdf5_file(odf_tmp_path, odf_shape, (1, 1, 1, num_coeff), dtype='float32')
+    odf_tmp_file, odf_img = create_hdf5_file(odf_tmp_path, odf_shape, tuple(list(np.flip(odf_slc_shape)) + [num_coeff]),
+                                             dtype='float32')
     odf_tmp_dict = {'path': odf_tmp_path, 'obj': odf_tmp_file}
 
-    # create list of dictionaries of temporary HDF5 files (object and path)
-    odf_tmp_files = [bg_tmp_dict, odf_tmp_dict]
+    # initialize ODI datasets
+    odi_shape = tuple(np.flip(bg_shape))
+    odi_pri_tmp_path = path.join(save_dir, 'odi_pri_tmp{}.h5'.format(odf_scale))
+    odi_pri_tmp_file, odi_pri_img = create_hdf5_file(odi_pri_tmp_path, odi_shape, odf_slc_shape, dtype='uint8')
+    odi_pri_tmp_dict = {'path': odi_pri_tmp_path, 'obj': odi_pri_tmp_file}
 
-    return odf_image, bg_mrtrix_image, odf_shape, odf_tmp_files
+    odi_sec_tmp_path = path.join(save_dir, 'odi_sec_tmp{}.h5'.format(odf_scale))
+    odi_sec_tmp_file, odi_sec_img = create_hdf5_file(odi_sec_tmp_path, odi_shape, odf_slc_shape, dtype='uint8')
+    odi_sec_tmp_dict = {'path': odi_sec_tmp_path, 'obj': odi_sec_tmp_file}
+
+    odi_tot_tmp_path = path.join(save_dir, 'odi_tot_tmp{}.h5'.format(odf_scale))
+    odi_tot_tmp_file, odi_tot_img = create_hdf5_file(odi_tot_tmp_path, odi_shape, odf_slc_shape, dtype='uint8')
+    odi_tot_tmp_dict = {'path': odi_tot_tmp_path, 'obj': odi_tot_tmp_file}
+
+    odi_anis_tmp_path = path.join(save_dir, 'odi_anis_tmp{}.h5'.format(odf_scale))
+    odi_anis_tmp_file, odi_anis_img = create_hdf5_file(odi_anis_tmp_path, odi_shape, odf_slc_shape, dtype='uint8')
+    odi_anis_tmp_dict = {'path': odi_anis_tmp_path, 'obj': odi_anis_tmp_file}
+
+    # create list of dictionaries of temporary HDF5 files (object and path)
+    odf_tmp_files = [bg_tmp_dict, odf_tmp_dict, odi_pri_tmp_dict, odi_sec_tmp_dict, odi_tot_tmp_dict, odi_anis_tmp_dict]
+
+    return odf_img, bg_mrtrix_img, odi_pri_img, odi_sec_img, odi_tot_img, odi_anis_img, odf_shape, odi_shape, odf_tmp_files
 
 
 def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir, image_name, max_slice_size=100.0,
@@ -362,23 +401,23 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
 
                 for x in range(loop_range[2]):
 
-                    # index ranges of the analyzed fiber slice (with padding)
+                    # index ranges of the analyzed fiber sli (with padding)
                     rng_in, pad_mat = compute_slice_range(z, y, x, in_slice_shape, image_shape, pad_rng=pad)
 
                     # output index ranges
                     rng_out, _ = compute_slice_range(z, y, x, out_slice_shape, out_image_shape)
 
-                    # slice fiber image slice
+                    # sli fiber image sli
                     fiber_slice = slice_channel(image, rng_in, channel=ch_fiber, mosaic=mosaic)
 
-                    # skip background slice
+                    # skip background sli
                     if np.max(fiber_slice) != 0:
 
-                        # preprocess fiber slice
+                        # preprocess fiber sli
                         iso_fiber_slice = correct_image_anisotropy(fiber_slice, px_rsz_ratio,
                                                                    sigma=smooth_sigma, pad_mat=pad_mat)
 
-                        # crop isotropized fiber slice
+                        # crop isotropized fiber sli
                         iso_fiber_slice = crop_slice(iso_fiber_slice, rng_out)
 
                         # 3D Frangi filter
@@ -403,16 +442,16 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
                         # (optional) neuronal body masking
                         if lpf_soma_mask:
 
-                            # neuron slice index ranges (without padding)
+                            # neuron sli index ranges (without padding)
                             rng_in, _ = compute_slice_range(z, y, x, in_slice_shape, image_shape)
 
-                            # slice neuron image slice
+                            # sli neuron image sli
                             neuron_slice = slice_channel(image, rng_in, channel=ch_neuron, mosaic=mosaic)
 
-                            # resize neuron slice (lateral downsampling)
+                            # resize neuron sli (lateral downsampling)
                             iso_neuron_slice = correct_image_anisotropy(neuron_slice, px_rsz_ratio)
 
-                            # crop isotropized neuron slice
+                            # crop isotropized neuron sli
                             iso_neuron_slice = crop_slice(iso_neuron_slice, rng_out)
 
                             # mask neuronal bodies
@@ -473,35 +512,47 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
 
     Returns
     -------
-    odf_image: HDF5 dataset (shape=(X,Y,Z,3), dtype=float32)
+    odf_img: HDF5 dataset (shape=(X,Y,Z,3), dtype=float32)
         dataset of ODF spherical harmonics coefficients
 
-    bg_mrtrix_image: HDF5 dataset (shape=(X,Y,Z), dtype=uint8)
+    bg_mrtrix_img: HDF5 dataset (shape=(X,Y,Z), dtype=uint8)
         background dataset for ODF visualization in Mrtrix3
+
+    odi_pri_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        dataset of primary orientation dispersion parameters
+    
+    odi_sec_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        dataset of secondary orientation dispersion parameters
+    
+    odi_tot_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        dataset of total orientation dispersion parameters
+    
+    odi_anis_img: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        dataset of orientation dispersion anisotropy parameters
 
     tmp_file_lst: list
         updated list of dictionaries of temporary HDF5 files
         (file objects and paths)
     """
     # get info on the input volume of orientation vectors
-    vec_image_shape = np.asarray(fiber_vec_dset.shape)[:-1]
+    vec_img_shape = np.asarray(fiber_vec_dset.shape)[:-1]
     vec_item_size = get_item_bytes(fiber_vec_dset)
 
     # configure image slicing for ODF analysis
-    vec_slice_shape, odf_slice_shape, odf_scale \
-        = config_odf_slicing(vec_image_shape, vec_item_size, px_size_iso,
+    vec_slc_shape, odf_slc_shape, odf_scale \
+        = config_odf_slicing(vec_img_shape, vec_item_size, px_size_iso,
                              odf_scale_um=odf_scale_um, max_slice_size=max_slice_size)
 
     # print ODF super-voxel size
-    print_odf_supervoxel(vec_slice_shape, px_size_iso, odf_scale_um)
+    print_odf_supervoxel(vec_slc_shape, px_size_iso, odf_scale_um)
 
     # initialize ODF analysis output volumes
-    odf_image, bg_mrtrix_image, odf_image_shape, odf_tmp_files \
-        = init_odf_arrays(vec_image_shape, save_dir, odf_degrees=odf_degrees, odf_scale=odf_scale)
+    odf_img, bg_mrtrix_img, odi_pri_img, odi_sec_img, odi_tot_img, odi_anis_img, odf_img_shape, odi_img_shape, odf_tmp_files \
+        = init_odf_arrays(vec_img_shape, odf_slc_shape, save_dir, odf_degrees=odf_degrees, odf_scale=odf_scale)
     tmp_file_lst = tmp_file_lst + odf_tmp_files
 
     # iteratively apply Frangi filter to basic microscopy image slices
-    loop_range = np.ceil(np.divide(vec_image_shape, vec_slice_shape)).astype(int)
+    loop_range = np.ceil(np.divide(vec_img_shape, vec_slc_shape)).astype(int)
     total_iter = int(np.prod(loop_range))
     with alive_bar(total_iter, title='Image slice', length=33) as bar:
         for z in range(loop_range[0]):
@@ -511,40 +562,51 @@ def iterate_odf_on_slices(fiber_vec_dset, iso_fiber_dset, px_size_iso, save_dir,
                 for x in range(loop_range[2]):
 
                     # input index ranges
-                    rng_in, _ = compute_slice_range(z, y, x, vec_slice_shape, vec_image_shape)
+                    rng_in, _ = compute_slice_range(z, y, x, vec_slc_shape, vec_img_shape)
 
                     # ODF index ranges
-                    rng_odf, _ = compute_slice_range(x, y, z, np.flip(odf_slice_shape), odf_image_shape, flip=True)
+                    rng_odf, _ = compute_slice_range(x, y, z, np.flip(odf_slc_shape), odf_img_shape, flip=True)
+
+                    # ODI index ranges
+                    rng_odi, _ = compute_slice_range(z, y, x, odf_slc_shape, odi_img_shape)
 
                     # load dataset slices to NumPy arrays, transform axes
                     if iso_fiber_dset is None:
-                        iso_fiber_slice = None
+                        iso_fiber_slc = None
                     else:
-                        iso_fiber_slice = iso_fiber_dset[rng_in]
+                        iso_fiber_slc = iso_fiber_dset[rng_in]
                     rng_in = tuple(np.append(rng_in, slice(0, 3, 1)))
-                    vec_slice = fiber_vec_dset[rng_in]
+                    vec_slc = fiber_vec_dset[rng_in]
 
                     # ODF analysis
-                    odf_slice, bg_mrtrix_slice = compute_scaled_odf(odf_scale, vec_slice, iso_fiber_slice,
-                                                                    odf_slice_shape, degrees=odf_degrees)
+                    odf_slc, bg_mrtrix_slc, odi_pri_slc, odi_sec_slc, odi_tot_slc, odi_anis_slc = \
+                        compute_scaled_odf(odf_scale, vec_slc, iso_fiber_slc, odf_slc_shape, degrees=odf_degrees)                                                                    
 
                     # transform axes
-                    odf_slice = transform_axes(odf_slice, swapped=(0, 2), flipped=(1, 2))
-                    bg_mrtrix_slice = transform_axes(bg_mrtrix_slice, swapped=(0, 2), flipped=(1, 2))
+                    odf_slc = transform_axes(odf_slc, swapped=(0, 2), flipped=(1, 2))
+                    bg_mrtrix_slc = transform_axes(bg_mrtrix_slc, swapped=(0, 2), flipped=(1, 2))
 
                     # crop output slices
-                    odf_slice = crop_slice(odf_slice, rng_odf, flipped=(0, 1, 2))
-                    bg_mrtrix_slice = crop_slice(bg_mrtrix_slice, rng_odf, flipped=(0, 1, 2))
+                    odf_slc = crop_slice(odf_slc, rng_odf, flipped=(0, 1, 2))
+                    bg_mrtrix_slc = crop_slice(bg_mrtrix_slc, rng_odf, flipped=(0, 1, 2))
+                    odi_pri_slc = crop_slice(odi_pri_slc, rng_odi)
+                    odi_sec_slc = crop_slice(odi_sec_slc, rng_odi)
+                    odi_tot_slc = crop_slice(odi_tot_slc, rng_odi)
+                    odi_anis_slc = crop_slice(odi_anis_slc, rng_odi)
 
                     # fill datasets
-                    bg_mrtrix_image[rng_odf] = bg_mrtrix_slice
-                    rng_odf = tuple(np.append(rng_odf, slice(0, odf_slice.shape[-1], 1)))
-                    odf_image[rng_odf] = odf_slice
+                    bg_mrtrix_img[rng_odf] = bg_mrtrix_slc
+                    rng_odf = tuple(np.append(rng_odf, slice(0, odf_slc.shape[-1], 1)))
+                    odf_img[rng_odf] = odf_slc
+                    odi_pri_img[rng_odi] = (255 * odi_pri_slc).astype(np.uint8)
+                    odi_sec_img[rng_odi] = (255 * odi_sec_slc).astype(np.uint8)
+                    odi_tot_img[rng_odi] = (255 * odi_tot_slc).astype(np.uint8)
+                    odi_anis_img[rng_odi] = (255 * odi_anis_slc).astype(np.uint8)
 
                     # advance bar
                     bar()
 
-    return odf_image, bg_mrtrix_image, tmp_file_lst
+    return odf_img, bg_mrtrix_img, odi_pri_img, odi_sec_img, odi_tot_img, odi_anis_img, tmp_file_lst
 
 
 def mask_background(image, fiber_vec_slice, orientcol_slice, frac_anis_slice=None,
@@ -558,13 +620,13 @@ def mask_background(image, fiber_vec_slice, orientcol_slice, frac_anis_slice=Non
         fiber (or neuron) fluorescence volume image
 
     fiber_vec_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
-        fiber orientation vector slice
+        fiber orientation vector sli
 
     orientcol_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
-        orientation colormap slice
+        orientation colormap sli
 
     frac_anis_slice: numpy.ndarray (shape=(Z,Y,X), dtype=float)
-        fractional anisotropy slice
+        fractional anisotropy sli
 
     thresh_method: str
         thresholding method (refer to skimage.filters)
@@ -665,7 +727,8 @@ def save_frangi_arrays(fiber_vec_colmap, frac_anis_image, frangi_image, fiber_ma
         save_array('neuron_msk_' + image_name, save_dir, neuron_mask)
 
 
-def save_odf_arrays(odf_lst, bg_mrtrix_lst, save_dir, image_name, odf_scales_um):
+def save_odf_arrays(odf_lst, bg_lst, odi_pri_lst, odi_sec_lst, odi_tot_lst, odi_anis_lst, 
+                    save_dir, img_name, odf_scales_um):
     """
     Save the output arrays of the ODF analysis stage to TIF and Nifti files.
     Arrays tagged with 'mrtrixview' are preliminarily transformed
@@ -681,10 +744,22 @@ def save_odf_arrays(odf_lst, bg_mrtrix_lst, save_dir, image_name, odf_scales_um)
         list of HDF5 datasets of downsampled background images
         for ODF visualization in Mrtrix3 (fiber channel)
 
+    odi_pri_img_lst: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        list of HDF5 datasets of primary orientation dispersion parameters
+
+    odi_sec_img_lst: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        list of HDF5 datasets of secondary orientation dispersion parameters
+
+    odi_tot_img_lst: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        list of HDF5 datasets of total orientation dispersion parameters
+
+    odi_anis_img_lst: HDF5 dataset (shape=(Z,Y,X), dtype=uint8)
+        list of HDF5 datasets of orientation dispersion anisotropy parameters
+
     save_dir: str
         saving directory string path
 
-    image_name: str
+    img_name: str
         name of the input volume image
 
     odf_scales_um: list (dtype: float)
@@ -712,6 +787,11 @@ def save_odf_arrays(odf_lst, bg_mrtrix_lst, save_dir, image_name, odf_scales_um)
         mkdir(save_dir)
 
     # ODF analysis volumes to Nifti files (adjusted view for Mrtrix3)
-    for (odf, bg, s) in zip(odf_lst, bg_mrtrix_lst, odf_scales_um):
-        save_array(f'bg_mrtrixview_sv{s}_' + image_name, save_dir, bg, format='nii')
-        save_array(f'odf_mrtrixview_sv{s}_' + image_name, save_dir, odf, format='nii')
+    for (odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, s) in \
+        zip(odf_lst, bg_lst, odi_pri_lst, odi_sec_lst, odi_tot_lst, odi_anis_lst, odf_scales_um):
+        save_array(f'bg_mrtrixview_sv{s}_' + img_name, save_dir, bg, format='nii')
+        save_array(f'odf_mrtrixview_sv{s}_' + img_name, save_dir, odf, format='nii')
+        save_array(f'odi_pri_sv{s}_' + img_name, save_dir, odi_pri, odi=True)
+        save_array(f'odi_sec_sv{s}_' + img_name, save_dir, odi_sec, odi=True)
+        save_array(f'odi_tot_sv{s}_' + img_name, save_dir, odi_tot, odi=True)
+        save_array(f'odi_anis_sv{s}_' + img_name, save_dir, odi_anis, odi=True)

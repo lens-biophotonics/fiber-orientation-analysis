@@ -270,30 +270,30 @@ def config_odf_slicing(fiber_vec_shape, fiber_vec_item_size, px_size_iso, odf_sc
 
     Returns
     -------
-    fiber_vec_slice_shape: numpy.ndarray (shape=(3,), dtype=int)
+    fiber_vec_slc_shape: numpy.ndarray (shape=(3,), dtype=int)
         shape of the analyzed fiber vector slices [px]
 
-    odf_slice_shape: numpy.ndarray (shape=(3,), dtype=int)
+    odf_slc_shape: numpy.ndarray (shape=(3,), dtype=int)
         shape of the resulting ODF map slices [px]
 
     odf_scale: int
         fiber ODF resolution (super-voxel side in [px])
     """
     # shape of processed TPFM slices
-    fiber_vec_slice_shape, _ = \
+    fiber_vec_slc_shape, _ = \
         compute_slice_shape(fiber_vec_shape, fiber_vec_item_size, px_size=px_size_iso, max_slice_size=max_slice_size)
 
     # derive the ODF map shape from the ODF kernel size
     odf_scale = int(np.ceil(odf_scale_um / px_size_iso[0]))
 
     # adapt lateral vector chunk shape (Z,Y,X)
-    fiber_vec_slice_shape[1] = round_to_multiple(fiber_vec_slice_shape[1], odf_scale)
-    fiber_vec_slice_shape[2] = fiber_vec_slice_shape[1]
+    fiber_vec_slc_shape[1] = round_to_multiple(fiber_vec_slc_shape[1], odf_scale)
+    fiber_vec_slc_shape[2] = fiber_vec_slc_shape[1]
 
-    # get output ODF chunk shape (X,Y,Z)
-    odf_slice_shape = np.ceil(np.divide(fiber_vec_slice_shape, odf_scale)).astype(int)
+    # get output ODF chunk shape (Z,Y,X)
+    odf_slc_shape = np.ceil(np.divide(fiber_vec_slc_shape, odf_scale)).astype(int)
 
-    return fiber_vec_slice_shape, odf_slice_shape, odf_scale
+    return fiber_vec_slc_shape, odf_slc_shape, odf_scale
 
 
 def crop_slice(img_slice, rng, flipped=()):
