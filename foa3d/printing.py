@@ -247,7 +247,7 @@ def print_soma_masking(lpf_soma_mask):
         print("Lipofuscin-based soma masking: OFF\n")
 
 
-def print_image_shape(cli_args, image, mosaic):
+def print_image_shape(cli_args, image, mosaic, channel_ax=None):
     """
     Print volume image shape.
 
@@ -262,6 +262,9 @@ def print_image_shape(cli_args, image, mosaic):
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
+    channel_ax: int
+        channel axis (if ndim == 4)
+
     Returns
     -------
     None
@@ -271,14 +274,16 @@ def print_image_shape(cli_args, image, mosaic):
     px_size_xy = cli_args.px_size_xy
 
     # adapt axis order
-    if mosaic:
-        channel_axis = 1
-    else:
-        channel_axis = -1
+    image_shape = image.shape
+    if len(image_shape) == 4:
+        if mosaic:
+            channel_ax = 1
+        else:
+            channel_ax = -1
 
     # get image shape
-    image_shape = image.shape
-    image_shape = np.delete(image_shape, channel_axis)
+    if channel_ax is not None:
+        image_shape = np.delete(image_shape, channel_ax)
 
     print("\n                              Z      Y      X")
     print("Image shape          [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"

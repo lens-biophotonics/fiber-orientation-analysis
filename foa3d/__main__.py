@@ -8,7 +8,7 @@ from foa3d.utils import delete_tmp_files
 def foa3d(cli_args):
 
     # load image volume or dataset of fiber orientation vectors
-    img, mosaic, skip_frangi = load_microscopy_image(cli_args)
+    img, mosaic, skip_frangi, cli_args = load_microscopy_image(cli_args)
 
     # get pipeline configuration
     alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, z_min, z_max, \
