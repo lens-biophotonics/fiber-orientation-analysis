@@ -235,13 +235,14 @@ def init_odf_arrays(vec_img_shape, odf_slc_shape, save_dir, odf_degrees=6, odf_s
     # initialize ODF dataset
     num_coeff = get_sph_harm_ncoeff(odf_degrees)
     odf_shape = tuple(list(bg_shape) + [num_coeff])
+    odi_shape = np.flip(bg_shape)
+    odf_slc_shape = np.where(odi_shape > odf_slc_shape, odi_shape, odf_slc_shape)
     odf_tmp_path = path.join(save_dir, 'odf_tmp{}.h5'.format(odf_scale))
     odf_tmp_file, odf_img = create_hdf5_file(odf_tmp_path, odf_shape, tuple(list(np.flip(odf_slc_shape)) + [num_coeff]),
                                              dtype='float32')
     odf_tmp_dict = {'path': odf_tmp_path, 'obj': odf_tmp_file}
 
     # initialize ODI datasets
-    odi_shape = tuple(np.flip(bg_shape))
     odi_pri_tmp_path = path.join(save_dir, 'odi_pri_tmp{}.h5'.format(odf_scale))
     odi_pri_tmp_file, odi_pri_img = create_hdf5_file(odi_pri_tmp_path, odi_shape, odf_slc_shape, dtype='uint8')
     odi_pri_tmp_dict = {'path': odi_pri_tmp_path, 'obj': odi_pri_tmp_file}
