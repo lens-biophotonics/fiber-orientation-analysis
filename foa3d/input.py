@@ -73,8 +73,8 @@ def cli_parser():
     cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]\n')
     cli_parser.add_argument('--ch-fiber', type=int, default=1, help='myelinated fibers channel')
     cli_parser.add_argument('--ch-neuron', type=int, default=0, help='neuronal soma channel')
-    cli_parser.add_argument('--z-min', type=int, default=0, help='forced minimum output z-depth [μm]')
-    cli_parser.add_argument('--z-max', type=int, default=None, help='forced maximum output z-depth [μm]')
+    cli_parser.add_argument('--z-min', type=float, default=0, help='forced minimum output z-depth [μm]')
+    cli_parser.add_argument('--z-max', type=float, default=None, help='forced maximum output z-depth [μm]')
     cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the ODF super-voxels [μm]')
     cli_parser.add_argument('--odf-deg', type=int, default=6,
                             help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
