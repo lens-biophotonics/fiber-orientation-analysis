@@ -289,6 +289,10 @@ def iterate_frangi_on_slices(image, px_size, px_size_iso, smooth_sigma, save_dir
         list of temporary file dictionaries
         ('path': file path; 'obj': file object)
     """
+    # adjust for graylevel fiber image
+    if len(image.shape) == 3:
+        ch_fiber = None
+
     # get info on the input volume image
     image_shape, image_shape_um, image_item_size = get_image_info(image, px_size, mosaic=mosaic)
 

@@ -85,7 +85,7 @@ def cli_parser():
     return cli_args
 
 
-def get_image_info(image, px_size, mosaic=False):
+def get_image_info(image, px_size, mosaic=False, channel_ax=None):
     """
     Get information on the input microscopy volume image.
 
@@ -100,6 +100,9 @@ def get_image_info(image, px_size, mosaic=False):
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
+    channel_ax: int
+        channel axis
+
     Returns
     -------
     image_shape: numpy.ndarray (shape=(3,), dtype=int)
@@ -112,14 +115,16 @@ def get_image_info(image, px_size, mosaic=False):
         array item size (in bytes)
     """
     # adapt channel axis
-    if mosaic:
-        channel_axis = 1
-    else:
-        channel_axis = -1
+    if len(image.shape) == 4:
+        if mosaic:
+            channel_ax = 1
+        else:
+            channel_ax = -1
 
     # get info on microscopy volume image
     image_shape = np.asarray(image.shape)
-    image_shape = np.delete(image_shape, channel_axis)
+    if channel_ax is not None:
+        image_shape = np.delete(image_shape, channel_ax)
     image_shape_um = np.multiply(image_shape, px_size)
     image_item_size = get_item_bytes(image)
 
@@ -288,6 +293,9 @@ def load_microscopy_image(cli_args):
 
     mosaic: bool
         True for tiled microscopy reconstructions aligned using ZetaStitcher
+
+    cli_args: see ArgumentParser.parse_args
+        updated namespace of command line arguments
     """
     # print heading
     print(color_text(0, 191, 255, "\nMicroscopy Volume Image Import\n"))
@@ -337,6 +345,9 @@ def load_microscopy_image(cli_args):
                 image = np.load(image_path)
             elif image_format == 'tif' or image_format == 'tiff':
                 image = tiff.imread(image_path)
+        # grey channel fiber image
+        if len(image.shape) == 3:
+            cli_args.neuron_mask = False
 
     # print import time
     print_import_time(tic)
@@ -344,4 +355,4 @@ def load_microscopy_image(cli_args):
     # print volume image shape
     print_image_shape(cli_args, image, mosaic)
 
-    return image, mosaic, vector
+    return image, mosaic, vector, cli_args

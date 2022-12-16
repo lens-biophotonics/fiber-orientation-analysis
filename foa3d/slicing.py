@@ -364,9 +364,12 @@ def slice_channel(image, rng, channel, mosaic=False):
     """
     z_rng, r_rng, c_rng = rng
 
-    if mosaic:
-        image_slice = image[z_rng, channel, r_rng, c_rng]
+    if channel is None:
+        image_slice = image[z_rng, r_rng, c_rng]
     else:
-        image_slice = image[z_rng, r_rng, c_rng, channel]
+        if mosaic:
+            image_slice = image[z_rng, channel, r_rng, c_rng]
+        else:
+            image_slice = image[z_rng, r_rng, c_rng, channel]
 
     return image_slice
