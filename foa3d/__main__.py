@@ -24,7 +24,7 @@ def foa3d(cli_args):
                                        ch_neuron=ch_neuron, ch_fiber=ch_fiber, mosaic=mosaic)
 
         # save Frangi filtering arrays to TIF files
-        save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, save_dir, image_name)
+        save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, px_size_iso, save_dir, image_name)
 
     # estimate 3D fiber ODF maps iterating over the input list of ODF scales
     if odf_scales_um:

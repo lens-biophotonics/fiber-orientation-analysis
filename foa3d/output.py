@@ -36,7 +36,7 @@ def create_save_dir(image_path):
     return save_dir
 
 
-def save_array(fname, save_dir, nd_array, format='tif'):
+def save_array(fname, save_dir, nd_array, px_size=None, format='tif'):
     """
     Save array to file.
 
@@ -51,6 +51,9 @@ def save_array(fname, save_dir, nd_array, format='tif'):
     nd_array: numpy.ndarray
         data
 
+    px_size: tuple
+        pixel size (Z,Y,X) [um]
+
     format: str
         output format
 
@@ -60,7 +63,10 @@ def save_array(fname, save_dir, nd_array, format='tif'):
     """
     format = format.lower()
     if format == 'tif' or format == 'tiff':
-        tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array)
+        px_size_z, px_size_y, px_size_x = px_size
+        tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True,
+                     resolution=(1 / px_size_x, 1 / px_size_y),
+                     metadata={'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
     elif format == 'npy':
         np.save(path.join(save_dir, fname + '.npy'), nd_array)
     elif format == 'nii':

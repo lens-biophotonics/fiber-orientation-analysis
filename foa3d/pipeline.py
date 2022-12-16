@@ -558,7 +558,7 @@ def mask_background(image, fiber_vec_slice, orientcol_slice, thresh_method='yen'
     return fiber_vec_slice, orientcol_slice, background
 
 
-def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, save_dir, image_name):
+def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, px_size, save_dir, image_name):
     """
     Save the output arrays of the Frangi filter stage to TIF files.
 
@@ -575,6 +575,9 @@ def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, 
 
     neuron_mask: HDF5 dataset (shape=(Z,Y,X), dtype: uint8)
         neuron mask image
+
+    px_size: numpy.ndarray (shape=(3,), dtype=float)
+        pixel size (Z,Y,X) [μm]
 
     save_dir: str
         saving directory string path
@@ -595,17 +598,17 @@ def save_frangi_arrays(fiber_vec_colmap, frangi_image, fiber_mask, neuron_mask, 
         mkdir(save_dir)
 
     # save orientation color map to TIF
-    save_array('fiber_cmap_' + image_name, save_dir, fiber_vec_colmap)
+    save_array('fiber_cmap_' + image_name, save_dir, fiber_vec_colmap, px_size)
 
     # save Frangi-enhanced fiber volume to TIF
-    save_array('frangi_' + image_name, save_dir, frangi_image)
+    save_array('frangi_' + image_name, save_dir, frangi_image, px_size)
 
     # save masked fiber volume to TIF
-    save_array('fiber_msk_' + image_name, save_dir, fiber_mask)
+    save_array('fiber_msk_' + image_name, save_dir, fiber_mask, px_size)
 
     # save neuron channel volumes to TIF
     if neuron_mask is not None:
-        save_array('neuron_msk_' + image_name, save_dir, neuron_mask)
+        save_array('neuron_msk_' + image_name, save_dir, neuron_mask, px_size)
 
 
 def save_odf_arrays(odf_lst, bg_mrtrix_lst, save_dir, image_name, odf_scales_um):
