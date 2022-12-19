@@ -8,8 +8,6 @@ import numpy as np
 from numba import njit
 from scipy import ndimage as ndi
 
-from foa3d.utils import divide_nonzero
-
 
 def analyze_hessian_eigen(image, sigma, truncate=4):
     """
@@ -63,8 +61,7 @@ def compute_dominant_eigen(hessian):
     dominant_eigenvec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         Hessian eigenvectors related to the dominant (minimum) eigenvalue
     """
-    # compute and sort the eigenvalues/eigenvectors                            NOTE: evaluate the substitution with
-    #                                                                                scipy.linalg.eigh (eigenvalues are already ordered!)
+    # compute and sort the eigenvalues/eigenvectors
     # of the image Hessian matrices
     eigenval, eigenvec = np.linalg.eigh(hessian)
     sorted_eigenval, sorted_eigenvec = sort_eigen(eigenval, eigenvec)
@@ -75,6 +72,7 @@ def compute_dominant_eigen(hessian):
     return sorted_eigenval, dominant_eigenvec
 
 
+@njit(cache=True, parallel=True)
 def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
     """
     Compute the basic image features employed by the Frangi filter.
@@ -108,8 +106,8 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
         background score sensitivity
         (automatically computed if not provided as input)
     """
-    ra = divide_nonzero(np.abs(eigen2), np.abs(eigen3))
-    rb = divide_nonzero(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
+    ra = np.divide(np.abs(eigen2), np.abs(eigen3))
+    rb = np.divide(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
     s = compute_structureness(eigen1, eigen2, eigen3)
 
     # compute 'auto' gamma sensitivity
@@ -211,11 +209,16 @@ def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None,
     eigenvalues, eigenvectors = analyze_hessian_eigen(image, scale_px)
 
     # compute Frangi's vesselness probability
-    enhanced_array = compute_scaled_vesselness(*eigenvalues, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+    eigen1, eigen2, eigen3 = eigenvalues
+    enhanced_array = compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+
+    # reject vesselness background
+    enhanced_array = reject_vesselness_background(enhanced_array, eigen2, eigen3, dark)
 
     return enhanced_array, eigenvectors, eigenvalues
 
 
+@njit(cache=True, parallel=True)
 def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
     """
     Estimate Frangi's vesselness probability.
@@ -253,7 +256,7 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
     plate = compute_plate_like_score(ra, alpha)
     blob = compute_blob_like_score(rb, beta)
     background = compute_background_score(s, gamma)
-    vesselness = reject_background(plate * blob * background, eigen2, eigen3, dark)
+    vesselness = plate * blob * background
 
     return vesselness
 
@@ -277,8 +280,6 @@ def config_frangi_scales(scales_um, px_size):
     """
     scales_um = np.asarray(scales_um)
     scales_px = scales_um / px_size
-    if np.any(np.asarray(scales_px) < 0.0):
-        raise ValueError("  Negative scale values are not valid!!!")
 
     return scales_px
 
@@ -319,11 +320,6 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
     eigenvalues: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         structure tensor eigenvalues (best local spatial scale)
     """
-    # check image dimensions
-    dims = image.ndim
-    if not dims == 3:
-        raise ValueError("  Only 3D images are supported!!!")
-
     # single-scale vesselness analysis
     n_scales = len(scales_px)
     if n_scales == 1:
@@ -355,15 +351,15 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
     return enhanced_array, fiber_vectors, eigenvalues
 
 
-def reject_background(image, eigen2, eigen3, dark):
+def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
     """
     Reject the fiber background, exploiting the sign of the "secondary"
     eigenvalues λ2 and λ3.
 
     Parameters
     ----------
-    image: numpy.ndarray (shape=(Z,Y,X))
-        input volume image
+    vesselness: numpy.ndarray (shape=(Z,Y,X))
+        Frangi's vesselness image
 
     eigen2: numpy.ndarray (shape=(Z,Y,X), dtype=float)
         middle Hessian eigenvalue
@@ -377,18 +373,18 @@ def reject_background(image, eigen2, eigen3, dark):
 
     Returns
     -------
-    image: numpy.ndarray (shape=(Z,Y,X))
-        masked 3D image
+    vesselness: numpy.ndarray (shape=(Z,Y,X))
+        masked 3D vesselness image
     """
     if dark:
-        image[eigen2 < 0] = 0
-        image[eigen3 < 0] = 0
+        vesselness[eigen2 < 0] = 0
+        vesselness[eigen3 < 0] = 0
     else:
-        image[eigen2 > 0] = 0
-        image[eigen3 > 0] = 0
-    image[np.isnan(image)] = 0
+        vesselness[eigen2 > 0] = 0
+        vesselness[eigen3 > 0] = 0
+    vesselness[np.isnan(vesselness)] = 0
 
-    return image
+    return vesselness
 
 
 def sort_eigen(eigenval, eigenvec, axis=-1):
@@ -427,21 +423,21 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
     return sorted_eigenval, sorted_eigenvec
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def compute_plate_like_score(ra, alpha):
-    return 1 - np.exp(np.negative(np.square(ra)) / (2 * np.square(alpha)))
+    return 1 - np.exp(np.divide(np.negative(np.square(ra)), 2 * np.square(alpha)))
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def compute_blob_like_score(rb, beta):
-    return np.exp(np.negative(np.square(rb) / (2 * np.square(beta))))
+    return np.exp(np.divide(np.negative(np.square(rb)), 2 * np.square(beta)))
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def compute_background_score(s, gamma):
-    return 1 - np.exp(np.divide(np.negative(np.square(s)), (2 * np.square(gamma))))
+    return 1 - np.exp(np.divide(np.negative(np.square(s)), 2 * np.square(gamma)))
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def compute_structureness(eigen1, eigen2, eigen3):
     return np.sqrt(np.square(eigen1) + np.square(eigen2) + np.square(eigen3))

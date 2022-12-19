@@ -112,33 +112,6 @@ def delete_tmp_files(file_lst):
         remove(file['path'])
 
 
-def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
-    """
-    Divide two arrays handling zero denominator values.
-
-    Parameters
-    ----------
-    nd_array1: numpy.ndarray
-        dividend array
-
-    nd_array2: numpy.ndarray
-        divisor array
-
-    new_value: float
-        substituted value
-
-    Returns
-    -------
-    divided: numpy.ndarray
-        divided array
-    """
-    denominator = np.copy(nd_array2)
-    denominator[denominator == 0] = new_value
-    divided = np.divide(nd_array1, denominator)
-
-    return divided
-
-
 def elapsed_time(start_time):
     """
     Compute elapsed time from input start reference.
