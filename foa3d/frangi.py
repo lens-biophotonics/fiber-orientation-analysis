@@ -1,15 +1,14 @@
 # portions of code adapted from https://github.com/ellisdg/frangi3d (MIT license)
-
-import multiprocessing as mp
-from functools import partial
 from itertools import combinations_with_replacement
 
 import numpy as np
-from numba import njit
+from joblib import Parallel, delayed
 from scipy import ndimage as ndi
 
+from foa3d.utils import divide_nonzero
 
-def analyze_hessian_eigen(image, sigma, truncate=4):
+
+def analyze_hessian_eigen(img, sigma, truncate=4):
     """
     Return the eigenvalues of the local Hessian matrices
     of the input image array, sorted by absolute value (in ascending order),
@@ -17,7 +16,7 @@ def analyze_hessian_eigen(image, sigma, truncate=4):
 
     Parameters
     ----------
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         input volume image
 
     sigma: int
@@ -35,7 +34,7 @@ def analyze_hessian_eigen(image, sigma, truncate=4):
         eigenvectors array
     """
     # compute scaled Hessian matrices
-    hessian = compute_scaled_hessian(image, sigma=sigma, truncate=truncate)
+    hessian = compute_scaled_hessian(img, sigma=sigma, truncate=truncate)
 
     # compute dominant eigenvalues and related eigenvectors
     eigenval, eigenvec = compute_dominant_eigen(hessian)
@@ -72,7 +71,6 @@ def compute_dominant_eigen(hessian):
     return sorted_eigenval, dominant_eigenvec
 
 
-@njit(cache=True, parallel=True)
 def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
     """
     Compute the basic image features employed by the Frangi filter.
@@ -106,8 +104,8 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
         background score sensitivity
         (automatically computed if not provided as input)
     """
-    ra = np.divide(np.abs(eigen2), np.abs(eigen3))
-    rb = np.divide(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
+    ra = divide_nonzero(np.abs(eigen2), np.abs(eigen3))
+    rb = divide_nonzero(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
     s = compute_structureness(eigen1, eigen2, eigen3)
 
     # compute 'auto' gamma sensitivity
@@ -117,14 +115,14 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
     return ra, rb, s, gamma
 
 
-def compute_scaled_hessian(image, sigma=1, truncate=4):
+def compute_scaled_hessian(img, sigma=1, truncate=4):
     """
     Computes the scaled and normalized Hessian matrices of the input image.
     This is then used to estimate Frangi's vesselness probability score.
 
     Parameters
     ----------
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         input volume image
 
     sigma: int
@@ -139,13 +137,13 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
         Hessian matrix of image second derivatives
     """
     # get number of dimensions
-    ndim = image.ndim
+    ndim = img.ndim
 
     # scale selection
-    scaled_image = ndi.gaussian_filter(image, sigma=sigma, output=np.float32, truncate=truncate)
+    scaled_img = ndi.gaussian_filter(img, sigma=sigma, output=np.float32, truncate=truncate)
 
     # compute the first order gradients
-    gradient_list = np.gradient(scaled_image)
+    gradient_list = np.gradient(scaled_img)
 
     # compute the Hessian matrix elements
     hessian_elements = [np.gradient(gradient_list[ax0], axis=ax1)
@@ -156,7 +154,7 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     hessian_elements = [corr_factor * element for element in hessian_elements]
 
     # create the Hessian matrix from its basic elements
-    hessian = np.zeros((ndim, ndim) + scaled_image.shape, dtype=scaled_image.dtype)
+    hessian = np.zeros((ndim, ndim) + scaled_img.shape, dtype=scaled_img.dtype)
     for index, (ax0, ax1) in enumerate(combinations_with_replacement(range(ndim), 2)):
         element = hessian_elements[index]
         hessian[ax0, ax1, ...] = element
@@ -169,7 +167,7 @@ def compute_scaled_hessian(image, sigma=1, truncate=4):
     return hessian
 
 
-def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None, dark=False):
+def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, dark=False):
     """
     Estimate fiber orientation vectors at the input spatial scale.
 
@@ -178,7 +176,7 @@ def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None,
     scale_px: int
         spatial scale [px]
 
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         input 3D image
 
     alpha: float
@@ -206,20 +204,22 @@ def compute_scaled_orientation(scale_px, image, alpha=0.001, beta=1, gamma=None,
         structure tensor eigenvalues
     """
     # Hessian matrix estimation and eigenvalue decomposition
-    eigenvalues, eigenvectors = analyze_hessian_eigen(image, scale_px)
+    eigenvalues, eigenvectors = analyze_hessian_eigen(img, scale_px)
 
     # compute Frangi's vesselness probability
     eigen1, eigen2, eigen3 = eigenvalues
-    enhanced_array = compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+    vesselness = compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha=alpha, beta=beta, gamma=gamma)
 
     # reject vesselness background
-    enhanced_array = reject_vesselness_background(enhanced_array, eigen2, eigen3, dark)
+    enhanced_array = reject_vesselness_background(vesselness, eigen2, eigen3, dark)
+
+    # stack eigenvalues list
+    eigenvalues = np.stack(eigenvalues, axis=-1)
 
     return enhanced_array, eigenvectors, eigenvalues
 
 
-@njit(cache=True, parallel=True)
-def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
+def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
     """
     Estimate Frangi's vesselness probability.
 
@@ -243,10 +243,6 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
     gamma: float
         background score sensitivity
 
-    dark: bool
-        if True, enhance black 3D tubular structures
-        (i.e., negative contrast polarity)
-
     Returns
     -------
     vesselness: numpy.ndarray (shape=(Z,Y,X), dtype=float)
@@ -261,7 +257,7 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma, dark):
     return vesselness
 
 
-def config_frangi_scales(scales_um, px_size):
+def convert_frangi_scales(scales_um, px_size):
     """
     Compute the Frangi filter scales in pixel.
 
@@ -276,7 +272,7 @@ def config_frangi_scales(scales_um, px_size):
     Returns
     -------
     scales_px: numpy.ndarray (dtype=int)
-        spatial scales [px]
+        Frangi filter scales [px]
     """
     scales_um = np.asarray(scales_um)
     scales_px = scales_um / px_size
@@ -284,13 +280,13 @@ def config_frangi_scales(scales_um, px_size):
     return scales_px
 
 
-def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True):
+def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True):
     """
     Apply 3D Frangi filter to input volume image.
 
     Parameters
     ----------
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         input volume image
 
     scales_px: numpy.ndarray (or int)
@@ -324,29 +320,32 @@ def frangi_filter(image, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Tr
     n_scales = len(scales_px)
     if n_scales == 1:
         enhanced_array, fiber_vectors, eigenvalues \
-            = compute_scaled_orientation(scales_px[0], image, alpha=alpha, beta=beta, gamma=gamma,  dark=dark)
+            = compute_scaled_orientation(scales_px[0], img, alpha=alpha, beta=beta, gamma=gamma,  dark=dark)
 
     # parallel scaled vesselness analysis
     else:
-        par_compute_orientation \
-            = partial(compute_scaled_orientation, image=image, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+        with Parallel(n_jobs=n_scales, backend='threading', max_nbytes=None) as parallel:
+            par_res = \
+                parallel(
+                    delayed(compute_scaled_orientation)(
+                        scales_px[i], img=img,
+                        alpha=alpha, beta=beta, gamma=gamma, dark=dark) for i in range(n_scales))
 
-        with mp.Pool(n_scales) as p:
-            enhanced_array_list, eigenvectors_list, eigenvalues_list = zip(*p.map(par_compute_orientation, scales_px))
-        eigenvalues = np.stack(eigenvalues_list, axis=0)
-        eigenvectors = np.stack(eigenvectors_list, axis=0)
-        enhanced_array = np.stack(enhanced_array_list, axis=0)
+            # unpack and stack results
+            enhanced_array_tpl, eigenvectors_tpl, eigenvalues_tpl = zip(*par_res)
+            eigenvalues = np.stack(eigenvalues_tpl, axis=0)
+            eigenvectors = np.stack(eigenvectors_tpl, axis=0)
+            enhanced_array = np.stack(enhanced_array_tpl, axis=0)
 
-        # get max scale-wise vesselness
-        best_idx = np.argmax(enhanced_array, axis=0)
-        best_idx = np.expand_dims(best_idx, axis=0)
-        enhanced_array = np.take_along_axis(enhanced_array, best_idx, axis=0).squeeze(axis=0)
+            # get max scale-wise vesselness
+            best_idx = np.argmax(enhanced_array, axis=0)
+            best_idx = np.expand_dims(best_idx, axis=0)
+            enhanced_array = np.take_along_axis(enhanced_array, best_idx, axis=0).squeeze(axis=0)
 
-        # select fiber orientation vectors among different scales (and the associated eigenvalues)
-        best_idx = np.expand_dims(best_idx, axis=-1)
-        eigenvalues = np.moveaxis(eigenvalues, 1, -1)
-        eigenvalues = np.take_along_axis(eigenvalues, best_idx, axis=0).squeeze(axis=0)
-        fiber_vectors = np.take_along_axis(eigenvectors, best_idx, axis=0).squeeze(axis=0)
+            # select fiber orientation vectors (and the associated eigenvalues) among different scales
+            best_idx = np.expand_dims(best_idx, axis=-1)
+            eigenvalues = np.take_along_axis(eigenvalues, best_idx, axis=0).squeeze(axis=0)
+            fiber_vectors = np.take_along_axis(eigenvectors, best_idx, axis=0).squeeze(axis=0)
 
     return enhanced_array, fiber_vectors, eigenvalues
 
@@ -423,21 +422,17 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
     return sorted_eigenval, sorted_eigenvec
 
 
-@njit(cache=True, parallel=True)
 def compute_plate_like_score(ra, alpha):
     return 1 - np.exp(np.divide(np.negative(np.square(ra)), 2 * np.square(alpha)))
 
 
-@njit(cache=True, parallel=True)
 def compute_blob_like_score(rb, beta):
     return np.exp(np.divide(np.negative(np.square(rb)), 2 * np.square(beta)))
 
 
-@njit(cache=True, parallel=True)
 def compute_background_score(s, gamma):
     return 1 - np.exp(np.divide(np.negative(np.square(s)), 2 * np.square(gamma)))
 
 
-@njit(cache=True, parallel=True)
 def compute_structureness(eigen1, eigen2, eigen3):
     return np.sqrt(np.square(eigen1) + np.square(eigen2) + np.square(eigen3))

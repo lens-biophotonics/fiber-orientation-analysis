@@ -1,9 +1,12 @@
-from os import remove
+import gc
+from multiprocessing import cpu_count
+from os import environ, path, remove, unlink
+from shutil import rmtree
 from time import perf_counter
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
-from h5py import File
+from joblib import dump, load
 from matplotlib.colors import hsv_to_rgb
 from skimage.filters import (threshold_li, threshold_niblack,
                              threshold_sauvola, threshold_triangle,
@@ -11,13 +14,13 @@ from skimage.filters import (threshold_li, threshold_niblack,
 from skimage.morphology import skeletonize_3d
 
 
-def create_background_mask(image, thresh_method='yen', skeletonize=False):
+def create_background_mask(img, thresh_method='yen', skeletonize=False):
     """
     Compute background mask.
 
     Parameters
     ----------
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         microscopy volume image
 
     thresh_method: str
@@ -33,21 +36,21 @@ def create_background_mask(image, thresh_method='yen', skeletonize=False):
     """
     # select thresholding method
     if thresh_method == 'li':
-        initial_li_guess = np.mean(image[image != 0])
-        thresh = threshold_li(image, initial_guess=initial_li_guess)
+        initial_li_guess = np.mean(img[img != 0])
+        thresh = threshold_li(img, initial_guess=initial_li_guess)
     elif thresh_method == 'niblack':
-        thresh = threshold_niblack(image, window_size=15, k=0.2)
+        thresh = threshold_niblack(img, window_size=15, k=0.2)
     elif thresh_method == 'sauvola':
-        thresh = threshold_sauvola(image, window_size=15, k=0.2, r=None)
+        thresh = threshold_sauvola(img, window_size=15, k=0.2, r=None)
     elif thresh_method == 'triangle':
-        thresh = threshold_triangle(image, nbins=256)
+        thresh = threshold_triangle(img, nbins=256)
     elif thresh_method == 'yen':
-        thresh = threshold_yen(image, nbins=256)
+        thresh = threshold_yen(img, nbins=256)
     else:
         raise ValueError("  Unsupported thresholding method!!!")
 
     # compute mask
-    background_mask = image < thresh
+    background_mask = img < thresh
 
     # skeletonize mask
     if skeletonize:
@@ -58,36 +61,83 @@ def create_background_mask(image, thresh_method='yen', skeletonize=False):
     return background_mask
 
 
-def create_hdf5_file(path, dset_shape, chunk_shape, dtype):
+def create_memory_map(file_path, shape, dtype, arr=None, mmap_mode='r+'):
     """
-    Create HDF5 dataset.
+    Create a memory-map to an array stored in a binary file on disk.
 
     Parameters
     ----------
-    path: path-like object
-        HDF5 file path
+    file_path: str
+        path to file object to be used as the array data buffer
 
-    dset_shape: tuple (dtype: int)
-        dataset shape
-
-    chunk_shape: tuple (dtype: int)
-        shape of the chunked storage layout
+    shape: tuple
+        shape of the store array
 
     dtype:
-        data type of the HDF5 dataset
+        data-type used to interpret the file contents
+
+    arr: numpy.ndarray
+        array to be mapped
+
+    mmap_mode: str
+        file opening mode
 
     Returns
     -------
-    file:
-        HDF5 file object
-
-    dset:
-        HDF5 dataset
+    mmap: NumPy memory map
+        memory-mapped array
     """
-    file = File(path, 'w')
-    dset = file.create_dataset('chunked', tuple(dset_shape), chunks=tuple(chunk_shape), dtype=dtype)
+    if path.exists(file_path):
+        unlink(file_path)
+    if arr is None:
+        arr = np.zeros(tuple(shape), dtype=dtype)
+    _ = dump(arr, file_path)
+    mmap = load(file_path, mmap_mode=mmap_mode)
+    del arr
+    _ = gc.collect()
 
-    return file, dset
+    return mmap
+
+
+def get_available_cores():
+    """
+    Return the number of available logical cores.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    num_cpu: int
+        number of available cores
+    """
+    num_cpu = environ.pop('OMP_NUM_THREADS', default=None)
+    if num_cpu is None:
+        num_cpu = cpu_count()
+    else:
+        num_cpu = int(num_cpu)
+
+    return num_cpu
+
+
+def delete_tmp_folder(tmp_dir):
+    """
+    Delete temporary folder.
+
+    Parameters
+    ----------
+    tmp_dir: str
+        path to temporary folder to be removed
+
+    Returns
+    -------
+    None
+    """
+    try:
+        rmtree(tmp_dir)
+    except OSError:
+        pass
 
 
 def delete_tmp_files(file_lst):
@@ -110,6 +160,33 @@ def delete_tmp_files(file_lst):
     for file in file_lst:
         file['obj'].close()
         remove(file['path'])
+
+
+def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
+    """
+    Divide two arrays handling zero denominator values.
+
+    Parameters
+    ----------
+    nd_array1: numpy.ndarray
+        dividend array
+
+    nd_array2: numpy.ndarray
+        divisor array
+
+    new_value: float
+        substituted value
+
+    Returns
+    -------
+    divided: numpy.ndarray
+        divided array
+    """
+    denominator = np.copy(nd_array2)
+    denominator[denominator == 0] = new_value
+    divided = np.divide(nd_array1, denominator)
+
+    return divided
 
 
 def elapsed_time(start_time):
@@ -284,16 +361,16 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
     return norm_angle
 
 
-def normalize_image(image, max_out_value=255.0, dtype=np.uint8):
+def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     """
     Normalize image data.
 
     Parameters
     ----------
-    image: numpy.ndarray
+    img: numpy.ndarray
         input image
 
-    max_out_value: float
+    max_out_val: float
         maximum output value
 
     dtype:
@@ -301,32 +378,32 @@ def normalize_image(image, max_out_value=255.0, dtype=np.uint8):
 
     Returns
     -------
-    norm_image: numpy.ndarray
+    norm_img: numpy.ndarray
         normalized image
     """
     # get min and max values
-    min_value = np.min(image)
-    max_value = np.max(image)
+    min_val = np.min(img)
+    max_val = np.max(img)
 
     # normalization
-    if max_value != 0:
-        if max_value != min_value:
-            norm_image = (((image - min_value) / (max_value - min_value)) * max_out_value).astype(dtype)
+    if max_val != 0:
+        if max_val != min_val:
+            norm_img = (((img - min_val) / (max_val - min_val)) * max_out_val).astype(dtype)
         else:
-            norm_image = ((image / max_value) * max_out_value).astype(dtype)
+            norm_img = ((img / max_val) * max_out_val).astype(dtype)
     else:
-        norm_image = image.astype(dtype)
+        norm_img = img.astype(dtype)
 
-    return norm_image
+    return norm_img
 
 
-def orient_colormap(vec_image):
+def orient_colormap(vec_img):
     """
     Compute HSV colormap of vector orientations from 3D vector field.
 
     Parameters
     ----------
-    vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         orientation vectors
 
     Returns
@@ -335,11 +412,11 @@ def orient_colormap(vec_image):
         orientation color map
     """
     # get input array shape
-    vec_image_shape = vec_image.shape
+    vec_img_shape = vec_img.shape
 
     # select planar components
-    vy = vec_image[..., 1]
-    vx = vec_image[..., 2]
+    vy = vec_img[..., 1]
+    vx = vec_img[..., 2]
 
     # compute the in-plane versor length
     vxy_abs = np.sqrt(np.square(vx) + np.square(vy))
@@ -350,8 +427,8 @@ def orient_colormap(vec_image):
     vxy_ang = np.divide(vxy_ang, np.pi)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=tuple(list(vec_image_shape[:-1]) + [3]), dtype=np.uint8)
-    for z in range(vec_image_shape[0]):
+    rgb_map = np.zeros(shape=tuple(list(vec_img_shape[:-1]) + [3]), dtype=np.uint8)
+    for z in range(vec_img_shape[0]):
 
         # generate colormap slice by slice
         h = vxy_ang[z]
@@ -365,9 +442,9 @@ def orient_colormap(vec_image):
     return rgb_map
 
 
-def round_to_multiple(number, multiple):
+def ceil_to_multiple(number, multiple):
     """
-    Round number to the nearest multiple.
+    Round up number to the nearest multiple.
 
     Parameters
     ----------
@@ -376,14 +453,14 @@ def round_to_multiple(number, multiple):
 
     multiple:
         the input number will be rounded
-        to the nearest multiple of this value
+        to the nearest multiple higher than this value
 
     Returns
     -------
     rounded:
-        rounded number
+        rounded up number
     """
-    rounded = multiple * np.round(number / multiple)
+    rounded = multiple * np.ceil(number / multiple)
 
     return rounded
 
@@ -426,13 +503,13 @@ def transform_axes(nd_array, flipped=None, swapped=None, expand=None):
     return nd_array
 
 
-def vector_colormap(vec_image):
+def vector_colormap(vec_img):
     """
     Compute RGB colormap of orientation vector components from 3D vector field.
 
     Parameters
     ----------
-    vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         n-dimensional array of orientation vectors
 
     Returns
@@ -441,19 +518,19 @@ def vector_colormap(vec_image):
         orientation color map
     """
     # get input array shape
-    vec_image_shape = vec_image.shape
+    vec_img_shape = vec_img.shape
 
     # take absolute value
-    vec_image = np.abs(vec_image)
+    vec_img = np.abs(vec_img)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=vec_image_shape, dtype=np.uint8)
-    for z in range(vec_image_shape[0]):
+    rgb_map = np.zeros(shape=vec_img_shape, dtype=np.uint8)
+    for z in range(vec_img_shape[0]):
 
         # generate colormap slice by slice
-        image_r = vec_image[z, :, :, 2]
-        image_g = vec_image[z, :, :, 1]
-        image_b = vec_image[z, :, :, 0]
-        rgb_map[z] = make_lupton_rgb(image_r, image_g, image_b, minimum=0, stretch=1, Q=8)
+        img_r = vec_img[z, :, :, 2]
+        img_g = vec_img[z, :, :, 1]
+        img_b = vec_img[z, :, :, 0]
+        rgb_map[z] = make_lupton_rgb(img_r, img_g, img_b, minimum=0, stretch=1, Q=8)
 
     return rgb_map

@@ -39,7 +39,8 @@ def color_text(r, g, b, text):
     return clr_text
 
 
-def print_frangi_heading(alpha, beta, gamma, scales_um):
+def print_frangi_info(alpha, beta, gamma, scales_um, image_shape_um, in_slice_shape_um, tot_slice_num,
+                      px_size, image_item_size, lpf_soma_mask):
     """
     Print Frangi filter heading.
 
@@ -57,6 +58,24 @@ def print_frangi_heading(alpha, beta, gamma, scales_um):
     scales_um: list (dtype=float)
         analyzed spatial scales [μm]
 
+    image_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+        volume image shape [μm]
+
+    in_slice_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+        shape of the analyzed image slices [μm]
+
+    tot_slice_num: int
+        total number of analyzed image slices
+
+    px_size: numpy.ndarray (shape=(3,), dtype=float)
+        pixel size [μm]
+
+    image_item_size: int
+        image item size (in bytes)
+
+    lpf_soma_mask: bool
+        neuronal body masking flag
+
     Returns
     -------
     None
@@ -71,6 +90,29 @@ def print_frangi_heading(alpha, beta, gamma, scales_um):
           + u"\u03B3: {0}\n".format(gamma))
     print("Scales     [\u03BCm]: {}".format(scales_um))
     print("Diameters  [\u03BCm]: {}".format(4 * scales_um))
+
+    # print iterative analysis information
+    print_slicing_info(image_shape_um, in_slice_shape_um, tot_slice_num, px_size, image_item_size)
+
+    # print neuron masking info
+    print_soma_masking(lpf_soma_mask)
+
+
+def print_analysis_time(start_time):
+    """
+    Print volume image analysis time.
+
+    Parameters
+    ----------
+    start_time: float
+        analysis start time
+
+    Returns
+    -------
+    None
+    """
+    _, mins, secs = elapsed_time(start_time)
+    print("\nVolume image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs))
 
 
 def print_import_time(start_time):
@@ -90,7 +132,7 @@ def print_import_time(start_time):
     print("Volume image loaded in: {0} min {1:3.1f} s".format(mins, secs))
 
 
-def print_odf_heading(odf_scales_um, odf_degrees):
+def print_odf_info(odf_scales_um, odf_degrees):
     """
     Print ODF analysis heading.
 
@@ -108,30 +150,7 @@ def print_odf_heading(odf_scales_um, odf_degrees):
     """
     print(color_text(0, 191, 255, "\n3D ODF Analysis"))
     print("\nResolution   [\u03BCm]: {}".format(odf_scales_um))
-    print("Expansion degrees: {}".format(odf_degrees))
-
-
-def print_odf_supervoxel(voxel_shape, px_size_iso, odf_scale_um):
-    """
-    Print size of the ODF super-voxel.
-
-    Parameters
-    ----------
-    voxel_shape: numpy.ndarray (shape=(3,), dtype=int)
-        ODF super-voxel shape [px]
-
-    px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
-        adjusted isotropic pixel size [μm]
-
-    odf_scale_um: list (dtype=float)
-        fiber ODF resolution (super-voxel side [μm])
-
-    Returns
-    -------
-    None
-    """
-    print("\nSuper-voxel [\u03BCm]:  {0} x {1} x {1}"
-          .format(min(voxel_shape[0] * px_size_iso[0], odf_scale_um), odf_scale_um))
+    print("Expansion degrees: {}\n".format(odf_degrees))
 
 
 def print_pipeline_heading():
@@ -184,7 +203,7 @@ def print_resolution(px_size, psf_fwhm):
     print("PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
-def print_slicing_info(image_shape_um, slice_shape_um, px_size, image_item_size):
+def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, image_item_size):
     """
     Print information on the slicing of the basic image sub-volumes
     iteratively processed by the Foa3D pipeline.
@@ -196,6 +215,9 @@ def print_slicing_info(image_shape_um, slice_shape_um, px_size, image_item_size)
 
     slice_shape_um: numpy.ndarray (shape=(3,), dtype=float)
         shape of the analyzed image slices [μm]
+
+    tot_slice_num: int
+        total number of analyzed image slices
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
@@ -225,8 +247,10 @@ def print_slicing_info(image_shape_um, slice_shape_um, px_size, image_item_size)
           .format(np.ceil(image_size / 1024**2).astype(int)))
     print("Basic slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(slice_shape_um[0], slice_shape_um[1], slice_shape_um[2]))
-    print("Basic slice size     [MB]: {0}\n"
+    print("Basic slice size     [MB]: {0}"
           .format(np.ceil(max_slice_size / 1024**2).astype(int)))
+    print("Basic slice number:        {0}\n"
+          .format(tot_slice_num))
 
 
 def print_soma_masking(lpf_soma_mask):
@@ -236,6 +260,7 @@ def print_soma_masking(lpf_soma_mask):
     Parameters
     ----------
     lpf_soma_mask: bool
+        neuronal body masking flag
 
     Returns
     -------

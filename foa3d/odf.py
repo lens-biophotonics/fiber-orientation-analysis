@@ -3,7 +3,7 @@ import scipy as sp
 from numba import njit
 from skimage.transform import resize
 
-from foa3d.utils import normalize_image
+from foa3d.utils import normalize_image, transform_axes
 
 
 @njit(cache=True)
@@ -38,7 +38,7 @@ def compute_fiber_angles(fiber_vec_array, norm):
 
 
 @njit(cache=True)
-def compute_orientation_dispersion(tensor):
+def compute_orientation_dispersion(tensor, odi_pri, odi_sec, odi_tot, odi_anis):
     """
     Compute orientation dispersion parameters following F. Matuschke's method.
 
@@ -162,61 +162,6 @@ def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors
     return real_sph_harm
 
 
-def compute_scaled_odf(odf_scale, fiber_vec_image, iso_fiber_array, odf_patch_shape, degrees=6):
-    """
-    Iteratively generate 3D ODF maps at the desired spatial scale from basic slices
-    of the fiber orientation vectors returned by the Frangi filtering stage.
-
-    Parameters
-    ----------
-    odf_scale: int
-        fiber ODF resolution (super-voxel side [px])
-
-    fiber_vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float32)
-        fiber orientation vectors
-
-    iso_fiber_array: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
-        isotropic fiber volume image
-
-    odf_patch_shape: numpy.ndarray (shape=(Z,Y,X), dtype=int)
-        shape of the output ODF data chunk (coefficients axis excluded)
-
-    degrees: int
-        degrees of the spherical harmonics series expansion
-
-    Returns
-    -------
-    odf: numpy.ndarray (shape=(Z,Y,X, ncoeff), dtype=float32)
-        volumetric map of real-valued spherical harmonics coefficients
-
-    bg_mrtrix: numpy.ndarray (shape=(Z,Y,X), dtype=uint8)
-        downsampled ODF background image (fiber channel)
-
-    odi_pri: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
-        primary orientation dispersion index
-
-    odi_sec: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
-        secondary orientation dispersion index
-
-    odi_tot: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
-        total orientation dispersion index
-
-    odi_anis: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
-        orientation dispersion index anisotropy
-    """
-    # generate downsampled background for Mrtrix3 mrview
-    if iso_fiber_array is None:
-        bg_mrtrix = generate_odf_background(fiber_vec_image, vxl_side=odf_scale)
-    else:
-        bg_mrtrix = generate_odf_background(iso_fiber_array, vxl_side=odf_scale)
-
-    # compute ODF coefficients
-    odf, odi_pri, odi_sec, odi_tot, odi_anis = \
-        estimate_odf_coeff(fiber_vec_image, odf_patch_shape, vxl_side=odf_scale, degrees=degrees)
-
-    return odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis
-
-
 def compute_vec_eigen_tensor(fiber_vec):
     """
     Compute the eigenvalues of the 3x3 tensor derived from the flattened
@@ -232,9 +177,6 @@ def compute_vec_eigen_tensor(fiber_vec):
     w: numpy.ndarray (shape=(3,), dtype=float32)
         eigenvalues in ascending order
     """
-    # NOTE: you should check whether the vector axis
-    #       order impacts on the estimation of the
-    #       dispersion indices
     fiber_vec = np.delete(fiber_vec, np.all(fiber_vec == 0, axis=-1), axis=0)
     fiber_vec.shape = (-1, 3)
     t = np.zeros((3, 3))
@@ -246,23 +188,42 @@ def compute_vec_eigen_tensor(fiber_vec):
     return w
 
 
-def estimate_odf_coeff(fiber_vec_image, vec_slice_shape, vxl_side, degrees, vxl_thr=0.5, vec_thr=-1):
+def estimate_odf_coeff(fiber_vec_img, odf, odi_pri, odi_sec, odi_tot, odi_anis, tensor, vxl_side, odf_norm,
+                       odf_degrees=6, vxl_thr=0.5, vec_thr=-1):
     """
     Estimate the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
 
     Parameters
     ----------
-    fiber_vec_image: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    fiber_vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
         fiber orientation vectors
 
-    odf_slice_shape: numpy.ndarray (shape=(Z,Y,X), dtype=int)
-        shape of the output ODF data chunk (coefficients axis excluded)
+    odf: NumPy memory-map object (shape=(X,Y,Z,3), dtype=float32)
+        initialized dataset of ODF spherical harmonics coefficients
+
+    odi_pri: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of primary orientation dispersion parameters
+
+    odi_sec: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of secondary orientation dispersion parameters
+
+    odi_tot: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of total orientation dispersion parameters
+
+    odi_anis: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+        initialized dataset of orientation dispersion anisotropy parameters
+
+    tensor: NumPy memory-map object (shape=(Z,Y,X,3), dtype=uint8)
+        initialized fiber orientation tensor
 
     vxl_side: int
-        side of the ODF super-voxel
+        side of the ODF super-voxel [px]
 
-    degrees: int
+    odf_norm: numpy.ndarray (dtype: float)
+        2D array of spherical harmonics normalization factors
+
+    odf_degrees: int
         degrees of the spherical harmonics series expansion
 
     vxl_thr: float
@@ -288,47 +249,47 @@ def estimate_odf_coeff(fiber_vec_image, vec_slice_shape, vxl_side, degrees, vxl_
     odi_anis: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
         orientation dispersion index anisotropy
     """
-    # initialize array of ODF coefficients
-    ncoeff = get_sph_harm_ncoeff(degrees)
-    odf_shape = tuple(list(vec_slice_shape) + [ncoeff])
-    tensor_shape = tuple(list(vec_slice_shape) + [3])
-
-    # initialize ODF and vector eigenvalues arrays
-    odf = np.zeros(odf_shape, dtype='float32')
-    tensor = np.zeros(tensor_shape, dtype='float32')
-
     # compute spherical harmonics normalization factors (once)
-    norm_factors = get_sph_harm_norm_factors(degrees)
+    odf_norm = get_sph_harm_norm_factors(odf_degrees)
 
-    # total iterations
-    fiber_vec_image_shape = np.array(fiber_vec_image.shape)
-    ref_vxl_size = min(vxl_side, fiber_vec_image_shape[0]) * vxl_side**2
-    for z in range(0, fiber_vec_image_shape[0], vxl_side):
+    # iterate over ODF super-voxels
+    fiber_vec_img_shape = np.array(fiber_vec_img.shape)
+    ref_vxl_size = min(vxl_side, fiber_vec_img_shape[0]) * vxl_side**2
+    for z in range(0, fiber_vec_img_shape[0], vxl_side):
         zmax = z + vxl_side
 
-        for y in range(0, fiber_vec_image_shape[1], vxl_side):
+        for y in range(0, fiber_vec_img_shape[1], vxl_side):
             ymax = y + vxl_side
 
-            for x in range(0, fiber_vec_image_shape[2], vxl_side):
+            for x in range(0, fiber_vec_img_shape[2], vxl_side):
                 xmax = x + vxl_side
 
                 # slice vector voxel (skip boundary voxels and voxels without enough non-zero orientation vectors)
-                vec_vxl = fiber_vec_image[z:zmax, y:ymax, x:xmax, :]
+                vec_vxl = fiber_vec_img[z:zmax, y:ymax, x:xmax, :]
                 zero_vecs = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
                 if sli_vxl_size / ref_vxl_size > vxl_thr and \
                    1 - zero_vecs / sli_vxl_size > vec_thr:
                     vec_arr = vec_vxl.ravel()
                     odf[z // vxl_side, y // vxl_side, x // vxl_side, :] \
-                        = fiber_vectors_to_sph_harm(vec_arr, degrees, norm_factors)
+                        = fiber_vectors_to_sph_harm(vec_arr, odf_degrees, odf_norm)
                     tensor[z // vxl_side, y // vxl_side, x // vxl_side, :] \
                         = compute_vec_eigen_tensor(vec_arr)
 
     # compute dispersion and anisotropy parameters slice-wise
-    odi_pri, odi_sec, odi_tot, odi_anis = compute_orientation_dispersion(tensor)
+    odi_pri, odi_sec, odi_tot, odi_anis = compute_orientation_dispersion(tensor, odi_pri, odi_sec, odi_tot, odi_anis)
 
     # maintain black background
     odi_pri, odi_sec, odi_tot, odi_anis = mask_orientation_dispersion((odi_pri, odi_sec, odi_tot, odi_anis), tensor)
+
+    # transform axes
+    odf = transform_axes(odf, swapped=(0, 2), flipped=(1, 2))
+
+    # adjust data type
+    odi_pri = (255.0 * odi_pri).astype(np.uint8)
+    odi_sec = (255.0 * odi_sec).astype(np.uint8)
+    odi_tot = (255.0 * odi_tot).astype(np.uint8)
+    odi_anis = (255.0 * odi_anis).astype(np.uint8)
 
     return odf, odi_pri, odi_sec, odi_tot, odi_anis
 
@@ -442,47 +403,48 @@ def fiber_vectors_to_sph_harm(fiber_vec_array, degrees, norm_factors):
     return real_sph_harm
 
 
-def generate_odf_background(bg_image, vxl_side):
+def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
     """
     Generate the downsampled background image required
-    to visualize the 3D ODF map in Mrtrix3.
+    to visualize the 3D ODF map in MRtrix3.
 
     Parameters
     ----------
-    bg_volume: numpy.ndarray (shape=(Z,Y,X), dtype=uint8; or shape=(Z,Y,X,3), dtype=float32)
+    bg_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8; or shape=(Z,Y,X,3), dtype=float32)
         fiber volume image or orientation vector volume
-        to be used as the Mrtrix3 background image
+        to be used as the MRtrix3 background image
+
+    bg_mrtrix_mmap: NumPy memory-map object (shape=(X,Y,Z), dtype=uint8)
+        initialized background array for ODF visualization in MRtrix3
 
     vxl_side: int
-        side of the ODF super-voxel
+        side of the ODF super-voxel [px]
 
     Returns
     -------
-    bg_mrtrix: numpy.ndarray (shape=(Z,Y,X), dtype=uint8)
-        downsampled ODF background (fiber channel)
+    bg_mrtrix_mmap: NumPy memory-map object (shape=(X,Y,Z), dtype=uint8)
+        downsampled background for ODF visualization in MRtrix3
     """
     # get shape of new downsampled array
-    new_shape = tuple(np.ceil(np.divide(bg_image.shape[:3],  vxl_side)).astype(int))
+    new_shape = bg_mrtrix_mmap.shape[:-1]
 
     # normalize
-    dims = bg_image.ndim
+    dims = bg_img.ndim
     if dims == 3:
-        bg_image = normalize_image(bg_image)
+        bg_img = normalize_image(bg_img)
 
     # loop over z-slices, and resize them
-    bg_mrtrix = np.zeros(new_shape, dtype=np.uint8)
-    z_out = 0
-    for z in range(0, bg_image.shape[0], vxl_side):
+    for z in range(0, bg_img.shape[0], vxl_side):
         if dims == 3:
-            tmp_slice = np.mean(bg_image[z:z + vxl_side, ...].copy(), axis=0)
+            tmp_slice = np.mean(bg_img[z:z + vxl_side, ...], axis=0)
         elif dims == 4:
-            tmp_slice = 255.0 * np.sum(np.abs(bg_image[z, ...]), axis=-1)
+            tmp_slice = 255.0 * np.sum(np.abs(bg_img[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
-            tmp_slice = tmp_slice.astype(np.uint8)
-        bg_mrtrix[z_out, ...] = resize(tmp_slice, output_shape=new_shape[1:], anti_aliasing=True, preserve_range=True)
-        z_out += 1
+            tmp_slice = np.swapaxes(tmp_slice, 0, 1).astype(np.uint8)
+        bg_mrtrix_mmap[..., z // vxl_side] = resize(tmp_slice, output_shape=new_shape,
+                                                    anti_aliasing=True, preserve_range=True)
 
-    return bg_mrtrix
+    return bg_mrtrix_mmap
 
 
 @njit(cache=True)

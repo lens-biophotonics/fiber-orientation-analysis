@@ -6,7 +6,7 @@ from foa3d.printing import color_text, print_prepro_heading
 from foa3d.utils import fwhm_to_sigma
 
 
-def config_anisotropy_correction(px_size, psf_fwhm):
+def config_anisotropy_correction(px_size, psf_fwhm, vector):
     """
     Scanning and light-sheet fluorescence microscopes provide 3D data
     characterized by a lower resolution along the optical axis
@@ -24,6 +24,8 @@ def config_anisotropy_correction(px_size, psf_fwhm):
     psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
         3D PSF FWdHM [μm]
 
+    vector: bool
+
     Returns
     -------
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
@@ -34,7 +36,8 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         new isotropic pixel size [μm]
     """
     # print preprocessing heading
-    print_prepro_heading()
+    if not vector:
+        print_prepro_heading()
 
     # set the isotropic pixel resolution equal to the z-sampling step
     px_size_iso = px_size[0] * np.ones(shape=(3,))
@@ -57,10 +60,11 @@ def config_anisotropy_correction(px_size, psf_fwhm):
 
         # print preprocessing info
         gauss_sigma_um = np.multiply(smooth_sigma, px_size)
-        print(color_text(0, 191, 255, "\n(lateral PSF degradation)"))
-        print("\n                              Z      Y      X")
-        print("Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
-              .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')
+        if not vector:
+            print(color_text(0, 191, 255, "\n(lateral PSF degradation)"))
+            print("\n                              Z      Y      X")
+            print("Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+                  .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')
 
     # (no blurring)
     else:
@@ -68,15 +72,16 @@ def config_anisotropy_correction(px_size, psf_fwhm):
         smooth_sigma = None
 
     # print pixel resize info
-    print("\nOriginal pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
-          .format(px_size[0], px_size[1], px_size[2]))
-    print("Adjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})\n"
-          .format(px_size_iso[0], px_size_iso[1], px_size_iso[2]))
+    if not vector:
+        print("\nOriginal pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+              .format(px_size[0], px_size[1], px_size[2]))
+        print("Adjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})\n"
+              .format(px_size_iso[0], px_size_iso[1], px_size_iso[2]))
 
     return smooth_sigma, px_size_iso
 
 
-def correct_image_anisotropy(image, resize_ratio,
+def correct_image_anisotropy(img, resize_ratio,
                              sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
     """
     Smooth the input volume image along the X and Y axes so that the lateral
@@ -85,7 +90,7 @@ def correct_image_anisotropy(image, resize_ratio,
 
     Parameters
     ----------
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         microscopy volume image
 
     resize_ratio: numpy.ndarray (shape=(3,), dtype=float)
@@ -109,32 +114,32 @@ def correct_image_anisotropy(image, resize_ratio,
 
     Returns
     -------
-    iso_image: numpy.ndarray (shape=(Z,Y,X))
+    iso_img: numpy.ndarray (shape=(Z,Y,X))
         isotropic microscopy volume image
     """
     # no resizing
     if np.all(resize_ratio == 1):
-        iso_image = image
+        iso_img = img
     else:
         # get original volume shape
-        image_shape = image.shape
+        img_shape = img.shape
 
         # lateral blurring
         if sigma is not None:
-            image = gaussian_filter(image, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
+            img = gaussian_filter(img, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
 
         # delete padded boundaries
         if pad_mat is not None:
             if np.count_nonzero(pad_mat) > 0:
-                image = image[pad_mat[0, 0]:image_shape[0] - pad_mat[0, 1],
-                              pad_mat[1, 0]:image_shape[1] - pad_mat[1, 1],
-                              pad_mat[2, 0]:image_shape[2] - pad_mat[2, 1]]
+                img = img[pad_mat[0, 0]:img_shape[0] - pad_mat[0, 1],
+                          pad_mat[1, 0]:img_shape[1] - pad_mat[1, 1],
+                          pad_mat[2, 0]:img_shape[2] - pad_mat[2, 1]]
 
         # lateral downsampling
-        iso_shape = np.ceil(np.multiply(np.asarray(image.shape), resize_ratio)).astype(int)
-        iso_image = np.zeros(shape=iso_shape, dtype=image.dtype)
+        iso_shape = np.ceil(np.multiply(np.asarray(img.shape), resize_ratio)).astype(int)
+        iso_img = np.zeros(shape=iso_shape, dtype=img.dtype)
         for z in range(iso_shape[0]):
-            iso_image[z, ...] = resize(image[z, ...], output_shape=tuple(iso_shape[1:]),
-                                       anti_aliasing=anti_aliasing, preserve_range=True)
+            iso_img[z, ...] = resize(img[z, ...], output_shape=tuple(iso_shape[1:]),
+                                     anti_aliasing=anti_aliasing, preserve_range=True)
 
-    return iso_image
+    return iso_img
