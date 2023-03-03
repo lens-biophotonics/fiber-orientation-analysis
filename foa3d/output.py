@@ -6,37 +6,63 @@ import numpy as np
 import tifffile as tiff
 
 
-def create_save_dir(image_path):
+def create_save_dirs(img_path, img_name, skip_frangi=False, skip_odf=False):
     """
     Create saving directory.
 
     Parameters
     ----------
-    image_path: str
+    img_path: str
         path to input microscopy volume image
+
+    img_name: str
+        name of the input volume image
+
+    skip_frangi: bool
+        True when fiber orientation vectors are provided as input
+        to the pipeline
+
+    skip_odf: bool
+        True when no ODF analysis is required following
+        the Frangi filtering stage
 
     Returns
     -------
-    save_dir: str
-        saving directory string path
+    save_subdirs: list (dtype=str)
+        saving subdirectory string paths
     """
     # get current time
     time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    # get volume image name
-    base_path = path.dirname(image_path)
-    image_fullname = path.basename(image_path)
-    image_name = image_fullname.split('.')[0]
+    # get base path
+    base_path = path.dirname(img_path)
 
     # create saving directory
-    save_dir = path.join(base_path, time_stamp + '_' + image_name)
+    save_dir = path.join(base_path, time_stamp + '_' + img_name)
+    save_subdirs = []
     if not path.isdir(save_dir):
         mkdir(save_dir)
 
-    return save_dir
+    # create Frangi filter output subdirectory
+    if not skip_frangi:
+        frangi_dir = path.join(save_dir, 'frangi')
+        mkdir(frangi_dir)
+        save_subdirs.append(frangi_dir)
+    else:
+        save_subdirs.append(None)
+
+    # create ODF analysis output subdirectory
+    if not skip_odf:
+        odf_dir = path.join(save_dir, 'odf')
+        mkdir(odf_dir)
+        save_subdirs.append(odf_dir)
+    else:
+        save_subdirs.append(None)
+
+    return save_subdirs
 
 
-def save_array(fname, save_dir, nd_array, px_size=None, format='tif'):
+def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False):
     """
     Save array to file.
 
@@ -57,6 +83,9 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif'):
     format: str
         output format
 
+    odi: bool
+        True when saving the ODI maps
+
     Returns
     -------
     None
@@ -64,9 +93,15 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif'):
     format = format.lower()
     if format == 'tif' or format == 'tiff':
         px_size_z, px_size_y, px_size_x = px_size
-        tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True,
-                     resolution=(1 / px_size_x, 1 / px_size_y),
-                     metadata={'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
+        if odi:
+            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True,
+                         resolution=(1 / px_size_x, 1 / px_size_y),
+                         metadata={'axes': 'ZYX', 'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
+        else:
+            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True,
+                         resolution=(1 / px_size_x, 1 / px_size_y),
+                         metadata={'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
+
     elif format == 'npy':
         np.save(path.join(save_dir, fname + '.npy'), nd_array)
     elif format == 'nii':

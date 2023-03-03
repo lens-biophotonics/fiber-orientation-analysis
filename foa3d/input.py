@@ -4,18 +4,20 @@ from time import perf_counter
 
 import numpy as np
 import tifffile as tiff
-from h5py import File
 
 try:
     from zetastitcher import VirtualFusedVolume
 except ImportError:
     pass
 
-from foa3d.output import create_save_dir
+import tempfile
+from os import path
+
+from foa3d.output import create_save_dirs
 from foa3d.preprocessing import config_anisotropy_correction
-from foa3d.printing import (color_text, print_import_time, print_resolution,
-                            print_image_shape)
-from foa3d.utils import get_item_bytes, get_output_prefix
+from foa3d.printing import (color_text, print_image_shape, print_import_time,
+                            print_resolution)
+from foa3d.utils import create_memory_map, get_item_bytes, get_output_prefix
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
@@ -64,8 +66,10 @@ def cli_parser():
                             help='list of Frangi filter scales [μm]')
     cli_parser.add_argument('-n', '--neuron-mask', action='store_true', default=False,
                             help='lipofuscin-based neuronal body masking')
-    cli_parser.add_argument('-m', '--max-slice-size', default=100.0, type=float,
-                            help='maximum size (in MegaBytes) of the basic image slices analyzed iteratively')
+    cli_parser.add_argument('-j', '--jobs-prc', type=float, default=80.0,
+                            help='maximum parallel jobs relative to the number of available CPU cores (percentage)')
+    cli_parser.add_argument('-r', '--ram', type=float, default=None,
+                            help='maximum RAM available to the Frangi filtering stage [GB] (default: use all)')
     cli_parser.add_argument('--px-size-xy', type=float, default=0.878, help='lateral pixel size [μm]')
     cli_parser.add_argument('--px-size-z', type=float, default=1.0, help='longitudinal pixel size [μm]')
     cli_parser.add_argument('--psf-fwhm-x', type=float, default=0.692, help='PSF FWHM along the X axis [μm]')
@@ -85,53 +89,59 @@ def cli_parser():
     return cli_args
 
 
-def get_image_info(image, px_size, mosaic=False, channel_ax=None):
+def get_image_info(img, px_size, ch_fiber, mosaic=False, ch_axis=None):
     """
     Get information on the input microscopy volume image.
 
     Parameters
     ----------
-    image: numpy.ndarray
+    img: numpy.ndarray
         microscopy volume image
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
+    ch_fiber: int
+        myelinated fibers channel
+
     mosaic: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
-    channel_ax: int
+    ch_axis: int
         channel axis
 
     Returns
     -------
-    image_shape: numpy.ndarray (shape=(3,), dtype=int)
+    img_shape: numpy.ndarray (shape=(3,), dtype=int)
         volume image shape [px]
 
-    image_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+    img_shape_um: numpy.ndarray (shape=(3,), dtype=float)
         volume image shape [μm]
 
-    image_item_size: int
+    img_item_size: int
         array item size (in bytes)
     """
     # adapt channel axis
-    if len(image.shape) == 4:
+    img_shape = np.asarray(img.shape)
+    ndim = len(img_shape)
+    if ndim == 4:
         if mosaic:
-            channel_ax = 1
+            ch_axis = 1
         else:
-            channel_ax = -1
+            ch_axis = -1
+    elif ndim == 3:
+        ch_fiber = None
 
     # get info on microscopy volume image
-    image_shape = np.asarray(image.shape)
-    if channel_ax is not None:
-        image_shape = np.delete(image_shape, channel_ax)
-    image_shape_um = np.multiply(image_shape, px_size)
-    image_item_size = get_item_bytes(image)
+    if ch_axis is not None:
+        img_shape = np.delete(img_shape, ch_axis)
+    img_shape_um = np.multiply(img_shape, px_size)
+    img_item_size = get_item_bytes(img)
 
-    return image_shape, image_shape_um, image_item_size
+    return img_shape, img_shape_um, img_item_size, ch_fiber
 
 
-def get_pipeline_config(cli_args):
+def get_pipeline_config(cli_args, vector, img_name):
     """
     Retrieve the Foa3D pipeline configuration.
 
@@ -139,6 +149,12 @@ def get_pipeline_config(cli_args):
     ----------
     cli_args: see ArgumentParser.parse_args
         populated namespace of command line arguments
+
+    vector: bool
+        True for fiber orientation vector data
+
+    img_name: str
+        name of the input volume image
 
     Returns
     -------
@@ -179,24 +195,19 @@ def get_pipeline_config(cli_args):
     ch_fiber: int
         myelinated fibers channel
 
-    max_slice_size: float
-        maximum memory size (in bytes) of the basic image slices
-        analyzed iteratively
-
     lpf_soma_mask: bool
         neuronal body masking
 
-    save_dir: str
-        saving directory path
+    max_ram_mb: float
+        maximum RAM available to the Frangi filtering stage [MB]
 
-    image_name: str
-        name of the input volume image
+    jobs_to_cores: float
+        max number of jobs relative to the available CPU cores
+        (default: 80%)
+
+    img_name: str
+        microscopy image filename
     """
-    # image filename
-    image_path = cli_args.image_path
-    image_fname = os.path.basename(image_path)
-    image_name = image_fname.split('.')[0]
-
     # Frangi filter parameters
     alpha = cli_args.alpha
     beta = cli_args.beta
@@ -206,21 +217,25 @@ def get_pipeline_config(cli_args):
         scales_um = [scales_um]
 
     # add pipeline configuration prefix to input volume name
-    pfx = get_output_prefix(scales_um, alpha, beta, gamma)
-    image_name = pfx + 'img' + image_name
+    if not vector:
+        pfx = get_output_prefix(scales_um, alpha, beta, gamma)
+        img_name = pfx + 'img' + img_name
 
     # pipeline flags
     lpf_soma_mask = cli_args.neuron_mask
     ch_neuron = cli_args.ch_neuron
     ch_fiber = cli_args.ch_fiber
-    max_slice_size = cli_args.max_slice_size
+    max_ram = cli_args.ram
+    max_ram_mb = None if max_ram is None else max_ram * 1000
+    jobs_prc = cli_args.jobs_prc
+    jobs_to_cores = 1 if jobs_prc >= 100 else 0.01 * jobs_prc
 
     # ODF analysis
     odf_scales_um = cli_args.odf_res
     odf_degrees = cli_args.odf_deg
 
     # TPFM pixel size and PSF FWHM
-    px_size, psf_fwhm = get_resolution(cli_args)
+    px_size, psf_fwhm = get_resolution(cli_args, vector)
 
     # forced output z-range
     z_min = cli_args.z_min
@@ -230,16 +245,13 @@ def get_pipeline_config(cli_args):
         z_max = int(np.ceil(z_max / px_size[0]))
 
     # preprocessing configuration
-    smooth_sigma, px_size_iso = config_anisotropy_correction(px_size, psf_fwhm)
-
-    # create saving directory
-    save_dir = create_save_dir(image_path)
+    smooth_sigma, px_size_iso = config_anisotropy_correction(px_size, psf_fwhm, vector)
 
     return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
-        z_min, z_max, ch_neuron, ch_fiber, max_slice_size, lpf_soma_mask, save_dir, image_name
+        z_min, z_max, ch_neuron, ch_fiber, lpf_soma_mask, max_ram_mb, jobs_to_cores, img_name
 
 
-def get_resolution(cli_args):
+def get_resolution(cli_args, vector):
     """
     Retrieve microscopy resolution from command line arguments.
 
@@ -269,7 +281,8 @@ def get_resolution(cli_args):
     psf_fwhm = np.array([psf_fwhm_z, psf_fwhm_y, psf_fwhm_x])
 
     # print TPFM resolution info
-    print_resolution(px_size, psf_fwhm)
+    if not vector:
+        print_resolution(px_size, psf_fwhm)
 
     return px_size, psf_fwhm
 
@@ -288,71 +301,104 @@ def load_microscopy_image(cli_args):
 
     Returns
     -------
-    image: numpy.ndarray or HDF5 dataset
+    img: NumPy memory map
         microscopy volume image or dataset of fiber orientation vectors
 
     mosaic: bool
         True for tiled microscopy reconstructions aligned using ZetaStitcher
 
+    skip_frangi: bool
+        True when fiber orientation vectors are provided as input
+        to the pipeline
+
     cli_args: see ArgumentParser.parse_args
         updated namespace of command line arguments
-    """
-    # print heading
-    print(color_text(0, 191, 255, "\nMicroscopy Volume Image Import\n"))
 
+    save_subdirs: list (dtype=str)
+        saving subdirectory string paths
+
+    tmp_dir: str
+        temporary file directory
+
+    img_name: str
+        microscopy image filename
+    """
     # retrieve volume path and name
-    image_path = cli_args.image_path
-    image_fname = os.path.basename(image_path)
-    split_fname = image_fname.split('.')
-    image_name = split_fname[0]
+    img_path = cli_args.image_path
+    img_fname = os.path.basename(img_path)
+    split_fname = img_fname.split('.')
+    img_name = img_fname.replace('.' + split_fname[-1], '')
     mosaic = False
-    vector = False
+    skip_frangi = False
+    skip_odf = cli_args.odf_res is None
+
+    # create temporary file directory
+    tmp_dir = tempfile.mkdtemp()
 
     # check input volume image format (ZetaStitcher .yml file)
     if len(split_fname) == 1:
         raise ValueError('Format must be specified for input volume images!')
     else:
-        image_format = split_fname[-1]
-        if image_format == 'yml':
+        img_fmt = split_fname[-1]
+        if img_fmt == 'yml':
             mosaic = True
 
     # import start time
     tic = perf_counter()
 
     # fiber orientation vectors dataset
-    if image_format == 'h5':
-        hf = File(image_path, 'r')
-        image = hf.get('chunked')
+    if img_fmt == 'npy':
+
+        # print heading
+        print(color_text(0, 191, 255, "\nFiber Orientation Data Import\n"))
+
+        # load fiber orientation data
+        img = np.load(img_path, mmap_mode='r')
 
         # check dimensions
-        if image.ndim != 4:
+        if img.ndim != 4:
             raise ValueError('Invalid fiber orientation dataset (ndim != 4)')
         else:
-            vector = True
-            print("Loading " + image_name + " orientation dataset...\n")
+            skip_frangi = True
+            print("Loading " + img_name + " orientation dataset...\n")
 
     # microscopy volume image
     else:
-        # load tiled reconstruction (aligned using ZetaStitcher)
+        # print heading
+        print(color_text(0, 191, 255, "\nMicroscopy Volume Image Import\n"))
+
+        # load microscopy tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
-            print("Loading " + image_name + " tiled reconstruction...\n")
-            image = VirtualFusedVolume(image_path)
-        # load z-stack
+            print("Loading " + img_name + " tiled reconstruction...\n")
+            img = VirtualFusedVolume(img_path)
+
+        # load microscopy z-stack
         else:
-            print("Loading " + image_fname + " z-stack...\n")
-            image_format = image_format.lower()
-            if image_format == 'npy':
-                image = np.load(image_path)
-            elif image_format == 'tif' or image_format == 'tiff':
-                image = tiff.imread(image_path)
+            print("Loading " + img_fname + " z-stack...\n")
+            img_fmt = img_fmt.lower()
+            if img_fmt == 'npy':
+                img = np.load(img_path)
+            elif img_fmt == 'tif' or img_fmt == 'tiff':
+                img = tiff.imread(img_path)
+
         # grey channel fiber image
-        if len(image.shape) == 3:
+        if len(img.shape) == 3:
             cli_args.neuron_mask = False
+
+        # create image memory map
+        mmap_path = path.join(tmp_dir, 'tmp_' + img_name + '.mmap')
+        img = create_memory_map(mmap_path, img.shape, dtype=img.dtype, arr=img[:], mmap_mode='r')
 
     # print import time
     print_import_time(tic)
 
-    # print volume image shape
-    print_image_shape(cli_args, image, mosaic)
+    # create saving directory
+    save_subdirs = create_save_dirs(img_path, img_name, skip_frangi=skip_frangi, skip_odf=skip_odf)
 
-    return image, mosaic, vector, cli_args
+    # print volume image shape
+    if not skip_frangi:
+        print_image_shape(cli_args, img, mosaic)
+    else:
+        print()
+
+    return img, mosaic, skip_frangi, cli_args, save_subdirs, tmp_dir, img_name

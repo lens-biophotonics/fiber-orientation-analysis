@@ -1,7 +1,9 @@
 alive-progress
 astropy
 h5py
+joblib
 matplotlib
 nibabel
 numba
+psutil
 scikit-image
