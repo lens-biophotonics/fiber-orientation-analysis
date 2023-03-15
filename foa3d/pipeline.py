@@ -672,7 +672,7 @@ def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir,
     save_frangi_arrays(fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, fiber_msk, neuron_msk,
                        px_size_iso, save_dir, img_name)
 
-    # print Frangi filtering timebatch_size
+    # print Frangi filtering time
     print_analysis_time(start_time)
 
     return fiber_vec_img, iso_fiber_img
