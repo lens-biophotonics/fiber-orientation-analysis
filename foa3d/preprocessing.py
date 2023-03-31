@@ -10,8 +10,8 @@ def config_anisotropy_correction(px_size, psf_fwhm, vector):
     """
     Scanning and light-sheet fluorescence microscopes provide 3D data
     characterized by a lower resolution along the optical axis
-    (i.e. the z-axis). However, the longitudinal PSF anisotropy introduces
-    a strong bias in the estimated 3D orientations
+    (i.e. the z-axis). However, the longitudinal anisotropy of the PSF
+    introduces a strong bias in the estimated 3D orientations
     as discussed by Morawski et al. (NeuroImage, 2018).
     Thus, for obtaining a uniform 3D resolution, the X and Y axes of the input
     microscopy volume images need in general to be blurred.
@@ -22,14 +22,14 @@ def config_anisotropy_correction(px_size, psf_fwhm, vector):
         pixel size [μm]
 
     psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
-        3D PSF FWdHM [μm]
+        3D FWHM of the PSF [μm]
 
     vector: bool
 
     Returns
     -------
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of low-pass Gaussian filter [px]
+        3D standard deviation of the low-pass Gaussian filter [px]
         (resolution anisotropy correction)
 
     px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
@@ -97,7 +97,7 @@ def correct_image_anisotropy(img, resize_ratio,
         3D resize ratio
 
     sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of low-pass Gaussian filter [px]
+        3D standard deviation of the low-pass Gaussian filter [px]
         (resolution anisotropy correction)
 
     pad_mat: numpy.ndarray (shape=(3,2), dtype=int)

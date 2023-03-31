@@ -48,12 +48,16 @@ def cli_parser():
                     '            Alimi   et al.  (2020) '
                     'Analytical and fast Fiber Orientation Distribution '
                     'reconstruction in 3D-Polarized Light Imaging. '
-                    'Medical Image Analysis, 65, pp. 101760.\n\n',
+                    'Medical Image Analysis, 65, pp. 101760.\n'
+                    '            Sorelli et al.  (2023) '
+                    'Fiber enhancement and 3D orientation analysis '
+                    'in label-free two-photon fluorescence microscopy. '
+                    'Scientific Reports, 13, pp. 4160.\n',
         formatter_class=CustomFormatter)
     cli_parser.add_argument(dest='image_path',
-                            help='path to input microscopy volume image\n'
-                                 '* supported formats: .tif, .npy, .yml (ZetaStitcher stitch file), '
-                                 '.h5 (4D dataset of fiber vectors)\n'
+                            help='path to input microscopy volume image or to 4D array of fiber orientation vectors\n'
+                                 '* supported formats: .tif (image), '
+                                 '.npy (image or fiber vectors), .yml (ZetaStitcher stitch file)\n'
                                  '* image  axes order: (Z, Y, X)\n'
                                  '* vector axes order: (Z, Y, X, 3)')
     cli_parser.add_argument('-a', '--alpha', type=float, default=0.001,
@@ -69,17 +73,18 @@ def cli_parser():
     cli_parser.add_argument('-j', '--jobs-prc', type=float, default=80.0,
                             help='maximum parallel jobs relative to the number of available CPU cores (percentage)')
     cli_parser.add_argument('-r', '--ram', type=float, default=None,
-                            help='maximum RAM available to the Frangi filtering stage [GB] (default: use all)')
+                            help='maximum RAM available to the Frangi filtering stage [GB]: use all if None')
     cli_parser.add_argument('--px-size-xy', type=float, default=0.878, help='lateral pixel size [μm]')
     cli_parser.add_argument('--px-size-z', type=float, default=1.0, help='longitudinal pixel size [μm]')
     cli_parser.add_argument('--psf-fwhm-x', type=float, default=0.692, help='PSF FWHM along the X axis [μm]')
     cli_parser.add_argument('--psf-fwhm-y', type=float, default=0.692, help='PSF FWHM along the Y axis [μm]')
-    cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]\n')
+    cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]')
     cli_parser.add_argument('--ch-fiber', type=int, default=1, help='myelinated fibers channel')
     cli_parser.add_argument('--ch-neuron', type=int, default=0, help='neuronal soma channel')
     cli_parser.add_argument('--z-min', type=float, default=0, help='forced minimum output z-depth [μm]')
     cli_parser.add_argument('--z-max', type=float, default=None, help='forced maximum output z-depth [μm]')
-    cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the ODF super-voxels [μm]')
+    cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the fiber ODF super-voxels: '
+                                                                     'do not generate ODFs if None [μm]')
     cli_parser.add_argument('--odf-deg', type=int, default=6,
                             help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
 
@@ -168,7 +173,7 @@ def get_pipeline_config(cli_args, vector, img_name):
         background score sensitivity
 
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of low-pass Gaussian filter [px]
+        3D standard deviation of the low-pass Gaussian filter [px]
         (resolution anisotropy correction)
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)
@@ -216,12 +221,7 @@ def get_pipeline_config(cli_args, vector, img_name):
     if type(scales_um) is not list:
         scales_um = [scales_um]
 
-    # add pipeline configuration prefix to input volume name
-    if not vector:
-        pfx = get_output_prefix(scales_um, alpha, beta, gamma)
-        img_name = pfx + 'img' + img_name
-
-    # pipeline flags
+    # pipeline parameters
     lpf_soma_mask = cli_args.neuron_mask
     ch_neuron = cli_args.ch_neuron
     ch_fiber = cli_args.ch_fiber
@@ -230,11 +230,11 @@ def get_pipeline_config(cli_args, vector, img_name):
     jobs_prc = cli_args.jobs_prc
     jobs_to_cores = 1 if jobs_prc >= 100 else 0.01 * jobs_prc
 
-    # ODF analysis
+    # ODF parameters
     odf_scales_um = cli_args.odf_res
     odf_degrees = cli_args.odf_deg
 
-    # TPFM pixel size and PSF FWHM
+    # microscopy image pixel size and PSF FWHM
     px_size, psf_fwhm = get_resolution(cli_args, vector)
 
     # forced output z-range
@@ -247,13 +247,18 @@ def get_pipeline_config(cli_args, vector, img_name):
     # preprocessing configuration
     smooth_sigma, px_size_iso = config_anisotropy_correction(px_size, psf_fwhm, vector)
 
+    # add pipeline configuration prefix to output filenames
+    if not vector:
+        pfx = get_output_prefix(scales_um, alpha, beta, gamma)
+        img_name = pfx + 'img' + img_name
+
     return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
         z_min, z_max, ch_neuron, ch_fiber, lpf_soma_mask, max_ram_mb, jobs_to_cores, img_name
 
 
 def get_resolution(cli_args, vector):
     """
-    Retrieve microscopy resolution from command line arguments.
+    Retrieve microscopy resolution information from command line arguments.
 
     Parameters
     ----------
@@ -272,7 +277,7 @@ def get_resolution(cli_args, vector):
     px_size_z = cli_args.px_size_z
     px_size_xy = cli_args.px_size_xy
 
-    # psf
+    # psf size
     psf_fwhm_z = cli_args.psf_fwhm_z
     psf_fwhm_y = cli_args.psf_fwhm_y
     psf_fwhm_x = cli_args.psf_fwhm_x
@@ -280,7 +285,7 @@ def get_resolution(cli_args, vector):
     px_size = np.array([px_size_z, px_size_xy, px_size_xy])
     psf_fwhm = np.array([psf_fwhm_z, psf_fwhm_y, psf_fwhm_x])
 
-    # print TPFM resolution info
+    # print resolution info
     if not vector:
         print_resolution(px_size, psf_fwhm)
 
@@ -290,9 +295,9 @@ def get_resolution(cli_args, vector):
 def load_microscopy_image(cli_args):
     """
     Load microscopy volume image from TIFF, NumPy or ZetaStitcher .yml file.
-    Alternatively, the processing pipeline accepts as input .h5 datasets of
-    fiber orientation vectors: in this case, the Frangi filter stage will be
-    skipped.
+    Alternatively, the processing pipeline accepts as input .npy files of
+    fiber orientation vector data:
+    in this case, the Frangi filter stage will be skipped.
 
     Parameters
     ----------
@@ -302,14 +307,14 @@ def load_microscopy_image(cli_args):
     Returns
     -------
     img: NumPy memory map
-        microscopy volume image or dataset of fiber orientation vectors
+        microscopy volume image or array of fiber orientation vectors
 
     mosaic: bool
         True for tiled microscopy reconstructions aligned using ZetaStitcher
 
     skip_frangi: bool
-        True when fiber orientation vectors are provided as input
-        to the pipeline
+        True when pre-estimated fiber orientation vectors
+        are directly provided to the pipeline
 
     cli_args: see ArgumentParser.parse_args
         updated namespace of command line arguments
@@ -346,13 +351,13 @@ def load_microscopy_image(cli_args):
     # import start time
     tic = perf_counter()
 
-    # fiber orientation vectors dataset
+    # fiber orientation vector data
     if img_fmt == 'npy':
 
         # print heading
         print(color_text(0, 191, 255, "\nFiber Orientation Data Import\n"))
 
-        # load fiber orientation data
+        # load fiber orientations
         img = np.load(img_path, mmap_mode='r')
 
         # check dimensions

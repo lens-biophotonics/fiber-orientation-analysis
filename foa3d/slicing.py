@@ -346,7 +346,7 @@ def config_frangi_slicing(img_shape, item_size, px_size, px_size_iso, smooth_sig
     batch_size: int
         slice batch size
 
-    max_size: float
+    slice_size: float
         maximum memory size (in megabytes) of the basic image slices
         analyzed iteratively
 

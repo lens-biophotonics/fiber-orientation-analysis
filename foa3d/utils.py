@@ -11,10 +11,9 @@ from matplotlib.colors import hsv_to_rgb
 from skimage.filters import (threshold_li, threshold_niblack,
                              threshold_sauvola, threshold_triangle,
                              threshold_yen)
-from skimage.morphology import skeletonize_3d
 
 
-def create_background_mask(img, thresh_method='yen', skeletonize=False):
+def create_background_mask(img, thresh_method='yen'):
     """
     Compute background mask.
 
@@ -25,9 +24,6 @@ def create_background_mask(img, thresh_method='yen', skeletonize=False):
 
     thresh_method: str
         image thresholding method
-
-    skeletonize: bool
-        if True, apply skeletonization to the boolean mask of myelinated fibers
 
     Returns
     -------
@@ -51,12 +47,6 @@ def create_background_mask(img, thresh_method='yen', skeletonize=False):
 
     # compute mask
     background_mask = img < thresh
-
-    # skeletonize mask
-    if skeletonize:
-        background_mask = np.logical_not(background_mask)
-        background_mask = skeletonize_3d(background_mask)
-        background_mask = np.logical_not(background_mask)
 
     return background_mask
 
@@ -287,7 +277,6 @@ def get_output_prefix(scales_um, alpha, beta, gamma):
     pfx: str
         pipeline configuration prefix
     """
-    # generate prefix
     pfx = 'sc'
     for s in scales_um:
         pfx = pfx + str(s) + '_'
