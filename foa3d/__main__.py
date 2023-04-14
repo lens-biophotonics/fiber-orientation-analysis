@@ -1,4 +1,4 @@
-from foa3d.input import cli_parser, get_pipeline_config, load_microscopy_image
+from foa3d.input import get_cli_parser, get_pipeline_config, load_microscopy_image
 from foa3d.pipeline import (parallel_odf_on_scales, parallel_frangi_on_slices)
 from foa3d.printing import print_pipeline_heading
 from foa3d.utils import delete_tmp_folder
@@ -38,7 +38,7 @@ def foa3d(cli_args):
 def main():
     # start Foa3D pipeline by terminal
     print_pipeline_heading()
-    foa3d(cli_args=cli_parser())
+    foa3d(cli_args=get_cli_parser())
 
 
 if __name__ == '__main__':

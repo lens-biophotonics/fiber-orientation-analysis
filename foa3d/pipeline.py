@@ -1,4 +1,3 @@
-from os import path
 from time import perf_counter
 
 import numpy as np
@@ -118,32 +117,21 @@ def init_frangi_volumes(img_shape, slice_shape, resize_ratio, tmp_dir, img_name,
     slice_shape[0] = dset_shape[0]
 
     # fiber channel memory maps
-    iso_fiber_path = path.join(tmp_dir, 'iso_fiber_' + img_name + '.mmap')
-    iso_fiber_img = create_memory_map(iso_fiber_path, dset_shape, dtype='uint8')
-
-    frangi_path = path.join(tmp_dir, 'frangi_' + img_name + '.mmap')
-    frangi_img = create_memory_map(frangi_path, dset_shape, dtype='uint8')
-
-    fiber_mask_path = path.join(tmp_dir, 'fiber_msk_' + img_name + '.mmap')
-    fiber_mask = create_memory_map(fiber_mask_path, dset_shape, dtype='uint8')
-
-    frac_anis_path = path.join(tmp_dir, 'frac_anis_' + img_name + '.mmap')
-    frac_anis_img = create_memory_map(frac_anis_path, dset_shape, dtype='uint8')
+    iso_fiber_img = create_memory_map(dset_shape, name='iso_fiber', tmp=tmp_dir, dtype='uint8')
+    frangi_img = create_memory_map(dset_shape, name='frangi', tmp=tmp_dir, dtype='uint8')
+    fiber_mask = create_memory_map(dset_shape, name='fiber_msk', tmp=tmp_dir, dtype='uint8')
+    frac_anis_img = create_memory_map(dset_shape, name='frac_anis', tmp=tmp_dir, dtype='uint8')
 
     # neuron channel memory map
     if lpf_soma_mask:
-        neuron_msk_path = path.join(tmp_dir, 'neuron_msk_' + img_name + '.mmap')
-        neuron_msk = create_memory_map(neuron_msk_path, dset_shape, dtype='uint8')
+        neuron_msk = create_memory_map(dset_shape, name='neuron_msk', tmp=tmp_dir, dtype='uint8')
     else:
         neuron_msk = None
 
     # fiber orientation memory maps
     vec_dset_shape = tuple(list(dset_shape) + [img_dims])
-    fiber_vec_path = path.join(tmp_dir, 'fiber_vec_' + img_name + '.mmap')
-    fiber_vec_img = create_memory_map(fiber_vec_path, vec_dset_shape, dtype='float32')
-
-    fiber_clr_path = path.join(tmp_dir, 'fiber_cmap_' + img_name + '.mmap')
-    fiber_vec_clr = create_memory_map(fiber_clr_path, vec_dset_shape, dtype='uint8')
+    fiber_vec_img = create_memory_map(vec_dset_shape, name='fiber_vec', tmp=tmp_dir, dtype='float32')
+    fiber_vec_clr = create_memory_map(vec_dset_shape, name='fiber_cmap', tmp=tmp_dir, dtype='uint8')
 
     return fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, fiber_mask, iso_fiber_img, neuron_msk, z_sel
 
@@ -156,9 +144,6 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6):
     ----------
     vec_img_shape: numpy.ndarray (shape=(3,), dtype=int)
         vector volume shape [px]
-
-    odf_slc_shape: numpy.ndarray (shape=(3,), dtype=int)
-        odf slice shape [px]
 
     tmp_dir: str
         temporary file directory
@@ -197,32 +182,23 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6):
 
     # create downsampled background memory map
     bg_shape = np.flip(odi_shape)
-    bg_tmp_path = path.join(tmp_dir, 'bg_tmp{}.mmap'.format(odf_scale))
-    bg_mrtrix = create_memory_map(bg_tmp_path, bg_shape, dtype='uint8')
+    bg_mrtrix = create_memory_map(bg_shape, name='bg_tmp{}.mmap'.format(odf_scale), tmp=tmp_dir, dtype='uint8')
 
     # create ODF memory map
     num_coeff = get_sph_harm_ncoeff(odf_degrees)
     odf_shape = tuple(list(odi_shape) + [num_coeff])
-    odf_tmp_path = path.join(tmp_dir, 'odf_tmp{}.mmap'.format(odf_scale))
-    odf = create_memory_map(odf_tmp_path, odf_shape, dtype='float32')
+    odf = create_memory_map(odf_shape, name='odf_tmp{}.mmap'.format(odf_scale), tmp=tmp_dir, dtype='float32')
 
     # create orientation tensor memory map
     vec_tensor_shape = tuple(list(odi_shape) + [3])
-    vec_tensor_tmp_path = path.join(tmp_dir, 'tensor_tmp{}.mmap'.format(odf_scale))
-    vec_tensor_eigen = create_memory_map(vec_tensor_tmp_path, vec_tensor_shape, dtype='float32')
+    vec_tensor_eigen = create_memory_map(vec_tensor_shape, name='tensor_tmp{}.mmap'.format(odf_scale),
+                                         tmp=tmp_dir, dtype='float32')
 
     # create ODI memory maps
-    odi_pri_tmp_path = path.join(tmp_dir, 'odi_pri_tmp{}.mmap'.format(odf_scale))
-    odi_pri = create_memory_map(odi_pri_tmp_path, odi_shape, dtype='uint8')
-
-    odi_sec_tmp_path = path.join(tmp_dir, 'odi_sec_tmp{}.mmap'.format(odf_scale))
-    odi_sec = create_memory_map(odi_sec_tmp_path, odi_shape, dtype='uint8')
-
-    odi_tot_tmp_path = path.join(tmp_dir, 'odi_tot_tmp{}.mmap'.format(odf_scale))
-    odi_tot = create_memory_map(odi_tot_tmp_path, odi_shape, dtype='uint8')
-
-    odi_anis_tmp_path = path.join(tmp_dir, 'odi_anis_tmp{}.mmap'.format(odf_scale))
-    odi_anis = create_memory_map(odi_anis_tmp_path, odi_shape, dtype='uint8')
+    odi_pri = create_memory_map(odi_shape, name='odi_pri_tmp{}.mmap'.format(odf_scale), tmp=tmp_dir, dtype='uint8')
+    odi_sec = create_memory_map(odi_shape, name='odi_sec_tmp{}.mmap'.format(odf_scale), tmp=tmp_dir, dtype='uint8')
+    odi_tot = create_memory_map(odi_shape, name='odi_tot_tmp{}.mmap'.format(odf_scale), tmp=tmp_dir, dtype='uint8')
+    odi_anis = create_memory_map(odi_shape, name='odi_anis_tmp{}.mmap'.format(odf_scale), tmp=tmp_dir, dtype='uint8')
 
     return odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, vec_tensor_eigen
 
@@ -360,7 +336,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
             neuron_slice = slice_channel(img, rng_in_neu, channel=ch_neuron, mosaic=mosaic)
 
             # resize neuron slice (lateral blurring and downsampling)
-            iso_neuron_slice = correct_image_anisotropy(neuron_slice, px_rsz_ratio)
+            iso_neuron_slice, _ = correct_image_anisotropy(neuron_slice, px_rsz_ratio)
 
             # crop isotropized neuron slice
             iso_neuron_slice = crop_slice(iso_neuron_slice, rng_out)
@@ -607,10 +583,6 @@ def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir,
     neuron_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
         neuron mask image
     """
-    # adjust for graylevel fiber image
-    if len(img.shape) == 3:
-        ch_fiber = None
-
     # get info on the input volume image
     img_shape, img_shape_um, img_item_size, ch_fiber = \
         get_image_info(img, px_size, ch_fiber, mosaic=mosaic)
