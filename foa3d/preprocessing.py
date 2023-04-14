@@ -81,7 +81,7 @@ def config_anisotropy_correction(px_size, psf_fwhm, vector):
     return smooth_sigma, px_size_iso
 
 
-def correct_image_anisotropy(img, resize_ratio,
+def correct_image_anisotropy(img, rsz_ratio,
                              sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
     """
     Smooth the input volume image along the X and Y axes so that the lateral
@@ -93,7 +93,7 @@ def correct_image_anisotropy(img, resize_ratio,
     img: numpy.ndarray (shape=(Z,Y,X))
         microscopy volume image
 
-    resize_ratio: numpy.ndarray (shape=(3,), dtype=float)
+    rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
         3D resize ratio
 
     sigma: numpy.ndarray (shape=(3,), dtype=int)
@@ -116,30 +116,30 @@ def correct_image_anisotropy(img, resize_ratio,
     -------
     iso_img: numpy.ndarray (shape=(Z,Y,X))
         isotropic microscopy volume image
+
+    rsz_pad_mat: numpy.ndarray (shape=(3,2), dtype=int)
+        resized padding range array
     """
     # no resizing
-    if np.all(resize_ratio == 1):
-        iso_img = img
-    else:
-        # get original volume shape
-        img_shape = img.shape
+    if np.all(rsz_ratio == 1):
+        return img
 
-        # lateral blurring
+    # lateral blurring
+    else:
         if sigma is not None:
             img = gaussian_filter(img, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
 
-        # delete padded boundaries
-        if pad_mat is not None:
-            if np.count_nonzero(pad_mat) > 0:
-                img = img[pad_mat[0, 0]:img_shape[0] - pad_mat[0, 1],
-                          pad_mat[1, 0]:img_shape[1] - pad_mat[1, 1],
-                          pad_mat[2, 0]:img_shape[2] - pad_mat[2, 1]]
-
         # lateral downsampling
-        iso_shape = np.ceil(np.multiply(np.asarray(img.shape), resize_ratio)).astype(int)
+        iso_shape = np.ceil(np.multiply(np.asarray(img.shape), rsz_ratio)).astype(int)
         iso_img = np.zeros(shape=iso_shape, dtype=img.dtype)
         for z in range(iso_shape[0]):
             iso_img[z, ...] = resize(img[z, ...], output_shape=tuple(iso_shape[1:]),
                                      anti_aliasing=anti_aliasing, preserve_range=True)
 
-    return iso_img
+        # resize padding matrix
+        if pad_mat is not None:
+            rsz_pad_mat = (np.floor(np.multiply(np.array([rsz_ratio, rsz_ratio]).transpose(), pad_mat))).astype(int)
+            return iso_img, rsz_pad_mat
+
+        else:
+            return iso_img

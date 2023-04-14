@@ -548,7 +548,7 @@ def config_odf_slicing(fiber_vec_shape, fiber_vec_item_size, odf_img_shape, odi_
     return rng_in_lst, rng_odf_lst, rng_odi_lst, fiber_vec_slc_shape, odf_slc_shape, tot_slice_num, batch_size
 
 
-def crop_slice(img_slice, rng, flipped=()):
+def crop_slice(img_slice, rng, pad=None, flipped=()):
     """
     Shrink image slice at volume boundaries, for overall shape consistency.
 
@@ -560,6 +560,9 @@ def crop_slice(img_slice, rng, flipped=()):
     rng: tuple
         3D index range
 
+    pad: numpy.ndarray (shape=(3,2), dtype=int)
+        padding range array
+
     flipped: tuple
         flipped axes
 
@@ -568,6 +571,12 @@ def crop_slice(img_slice, rng, flipped=()):
     cropped_slice: numpy.ndarray
         cropped image slice
     """
+    # delete padded boundaries
+    if pad is not None:
+        img_slice = img_slice[pad[0, 0]:img_slice.shape[0] - pad[0, 1],
+                              pad[1, 0]:img_slice.shape[1] - pad[1, 1],
+                              pad[2, 0]:img_slice.shape[2] - pad[2, 1]]
+
     # check slice shape and output index ranges
     out_slice_shape = img_slice.shape
     crop_rng = np.zeros(shape=(3,), dtype=int)

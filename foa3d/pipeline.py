@@ -326,17 +326,18 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
     if np.max(fiber_slice) != 0:
 
         # preprocess fiber slice
-        iso_fiber_slice = correct_image_anisotropy(fiber_slice, px_rsz_ratio, sigma=smooth_sigma, pad_mat=pad_mat)
+        iso_fiber_slice, rsz_pad_mat = \
+            correct_image_anisotropy(fiber_slice, px_rsz_ratio, sigma=smooth_sigma, pad_mat=pad_mat)
 
         # 3D Frangi filter
         frangi_slice, fiber_vec_slice, eigenval_slice = \
             frangi_filter(iso_fiber_slice, scales_px=scales_px, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
-        # crop isotropized fiber slice
-        iso_fiber_slice = crop_slice(iso_fiber_slice, rng_out)
-        frangi_slice = crop_slice(frangi_slice, rng_out)
-        fiber_vec_slice = crop_slice(fiber_vec_slice, rng_out)
-        eigenval_slice = crop_slice(eigenval_slice, rng_out)
+        # crop resulting slices
+        iso_fiber_slice = crop_slice(iso_fiber_slice, rng_out, rsz_pad_mat)
+        frangi_slice = crop_slice(frangi_slice, rng_out, rsz_pad_mat)
+        fiber_vec_slice = crop_slice(fiber_vec_slice, rng_out, rsz_pad_mat)
+        eigenval_slice = crop_slice(eigenval_slice, rng_out, rsz_pad_mat)
 
         # generate fractional anisotropy image
         frac_anis_slice = compute_fractional_anisotropy(eigenval_slice)
@@ -367,7 +368,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
             # mask neuronal bodies
             fiber_vec_slice, orientcol_slice, frac_anis_slice, neuron_mask_slice = \
                 mask_background(iso_neuron_slice, fiber_vec_slice, orientcol_slice, frac_anis_slice,
-                                thresh_method='yen', skeletonize=False, invert=True)
+                                thresh_method='yen', invert=True)
 
             # fill memory-mapped output neuron mask
             neuron_msk[rng_out] = (255 * neuron_mask_slice[z_sel, ...]).astype(np.uint8)
@@ -402,9 +403,6 @@ def mask_background(img, fiber_vec_slice, orientcol_slice, frac_anis_slice=None,
 
     thresh_method: str
         thresholding method (refer to skimage.filters)
-
-    skeletonize: bool
-        mask skeletonization flag
 
     invert: bool
         mask inversion flag
