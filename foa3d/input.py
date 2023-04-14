@@ -1,5 +1,5 @@
 import argparse
-import os
+import tempfile
 from time import perf_counter
 
 import numpy as np
@@ -10,7 +10,6 @@ try:
 except ImportError:
     pass
 
-import tempfile
 from os import path
 
 from foa3d.output import create_save_dirs
@@ -24,13 +23,9 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
     pass
 
 
-def cli_parser():
+def get_cli_parser():
     """
     Parse command line arguments.
-
-    Parameters
-    ----------
-    None
 
     Returns
     -------
@@ -74,6 +69,8 @@ def cli_parser():
                             help='maximum parallel jobs relative to the number of available CPU cores (percentage)')
     cli_parser.add_argument('-r', '--ram', type=float, default=None,
                             help='maximum RAM available to the Frangi filtering stage [GB]: use all if None')
+    cli_parser.add_argument('-m', '--mmap', action='store_true', default=False,
+                            help='create a memory-mapped array of the microscopy volume image')
     cli_parser.add_argument('--px-size-xy', type=float, default=0.878, help='lateral pixel size [μm]')
     cli_parser.add_argument('--px-size-z', type=float, default=1.0, help='longitudinal pixel size [μm]')
     cli_parser.add_argument('--psf-fwhm-x', type=float, default=0.692, help='PSF FWHM along the X axis [μm]')
@@ -130,10 +127,7 @@ def get_image_info(img, px_size, ch_fiber, mosaic=False, ch_axis=None):
     img_shape = np.asarray(img.shape)
     ndim = len(img_shape)
     if ndim == 4:
-        if mosaic:
-            ch_axis = 1
-        else:
-            ch_axis = -1
+        ch_axis = 1 if mosaic else -1
     elif ndim == 3:
         ch_fiber = None
 
@@ -144,6 +138,51 @@ def get_image_info(img, px_size, ch_fiber, mosaic=False, ch_axis=None):
     img_item_size = get_item_bytes(img)
 
     return img_shape, img_shape_um, img_item_size, ch_fiber
+
+
+def get_image_file(cli_args):
+    """
+    Get microscopy image file path and format.
+
+    Parameters
+    ----------
+    cli_args: see ArgumentParser.parse_args
+        populated namespace of command line arguments
+
+    Returns
+    -------
+    img_path: str
+        path to the microscopy volume image
+
+    img_name: str
+        name of the microscopy volume image
+
+    img_fmt: str
+        format of the microscopy volume image
+
+    mosaic: bool
+        True for tiled reconstructions aligned using ZetaStitcher
+
+    in_mmap: bool
+        create a memory-mapped array of the microscopy volume image,
+        increasing the parallel processing performance
+        (the image will be preliminarily loaded to RAM)
+    """
+    in_mmap = cli_args.mmap
+    img_path = cli_args.image_path
+    img_name = path.basename(img_path)
+    split_name = img_name.split('.')
+
+    if len(split_name) == 1:
+        raise ValueError('Format must be specified for input volume images!')
+    else:
+        mosaic = False
+        img_fmt = split_name[-1]
+        img_name = img_name.replace('.' + split_name[-1], '')
+        if img_fmt == 'yml':
+            mosaic = True
+
+    return img_path, img_name, img_fmt, mosaic, in_mmap
 
 
 def get_pipeline_config(cli_args, vector, img_name):
@@ -265,6 +304,9 @@ def get_resolution(cli_args, vector):
     cli_args: see ArgumentParser.parse_args
         populated namespace of command line arguments
 
+    vector: bool
+        True for fiber orientation vector data
+
     Returns
     -------
     px_size: numpy.ndarray (shape=(3,), dtype=float)
@@ -328,25 +370,13 @@ def load_microscopy_image(cli_args):
     img_name: str
         microscopy image filename
     """
-    # retrieve volume path and name
-    img_path = cli_args.image_path
-    img_fname = os.path.basename(img_path)
-    split_fname = img_fname.split('.')
-    img_name = img_fname.replace('.' + split_fname[-1], '')
-    mosaic = False
+    # initialize variables
     skip_frangi = False
     skip_odf = cli_args.odf_res is None
-
-    # create temporary file directory
     tmp_dir = tempfile.mkdtemp()
 
-    # check input volume image format (ZetaStitcher .yml file)
-    if len(split_fname) == 1:
-        raise ValueError('Format must be specified for input volume images!')
-    else:
-        img_fmt = split_fname[-1]
-        if img_fmt == 'yml':
-            mosaic = True
+    # retrieve volume path and name
+    img_path, img_name, img_fmt, mosaic, in_mmap = get_image_file(cli_args)
 
     # import start time
     tic = perf_counter()
@@ -379,31 +409,33 @@ def load_microscopy_image(cli_args):
 
         # load microscopy z-stack
         else:
-            print("Loading " + img_fname + " z-stack...\n")
+            print("Loading " + img_name + " z-stack...\n")
             img_fmt = img_fmt.lower()
             if img_fmt == 'npy':
                 img = np.load(img_path)
             elif img_fmt == 'tif' or img_fmt == 'tiff':
                 img = tiff.imread(img_path)
+            else:
+                raise ValueError('Unsupported image format!')
 
         # grey channel fiber image
         if len(img.shape) == 3:
             cli_args.neuron_mask = False
 
         # create image memory map
-        mmap_path = path.join(tmp_dir, 'tmp_' + img_name + '.mmap')
-        img = create_memory_map(mmap_path, img.shape, dtype=img.dtype, arr=img[:], mmap_mode='r')
+        if in_mmap:
+            img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp=tmp_dir, arr=img[:], mmap_mode='r')
 
     # print import time
     print_import_time(tic)
-
-    # create saving directory
-    save_subdirs = create_save_dirs(img_path, img_name, skip_frangi=skip_frangi, skip_odf=skip_odf)
 
     # print volume image shape
     if not skip_frangi:
         print_image_shape(cli_args, img, mosaic)
     else:
         print()
+
+    # create saving directory
+    save_subdirs = create_save_dirs(img_path, img_name, skip_frangi=skip_frangi, skip_odf=skip_odf)
 
     return img, mosaic, skip_frangi, cli_args, save_subdirs, tmp_dir, img_name

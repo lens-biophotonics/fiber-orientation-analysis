@@ -122,7 +122,7 @@ def correct_image_anisotropy(img, rsz_ratio,
     """
     # no resizing
     if np.all(rsz_ratio == 1):
-        return img
+        return img, None
 
     # lateral blurring
     else:
@@ -142,4 +142,4 @@ def correct_image_anisotropy(img, rsz_ratio,
             return iso_img, rsz_pad_mat
 
         else:
-            return iso_img
+            return iso_img, None
