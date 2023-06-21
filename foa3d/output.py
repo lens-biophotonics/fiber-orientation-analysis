@@ -94,11 +94,11 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False)
     if format == 'tif' or format == 'tiff':
         px_size_z, px_size_y, px_size_x = px_size
         if odi:
-            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True,
+            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True, bigtiff=True,
                          resolution=(1 / px_size_x, 1 / px_size_y),
                          metadata={'axes': 'ZYX', 'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
         else:
-            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True,
+            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True, bigtiff=True,
                          resolution=(1 / px_size_x, 1 / px_size_y),
                          metadata={'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
 

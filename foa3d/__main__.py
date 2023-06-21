@@ -29,7 +29,7 @@ def foa3d(cli_args):
             fiber_vec_img = img
             iso_fiber_img = None
         parallel_odf_on_scales(fiber_vec_img, iso_fiber_img, px_size_iso, save_subdirs[1], tmp_dir, img_name,
-                               odf_scales_um=odf_scales_um, odf_degrees=odf_degrees)
+                               odf_scales_um=odf_scales_um, odf_degrees=odf_degrees, max_ram_mb=max_ram_mb)
 
     # delete temporary folder
     delete_tmp_folder(tmp_dir)

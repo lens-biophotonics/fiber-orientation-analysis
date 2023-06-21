@@ -1,12 +1,13 @@
 import gc
 import tempfile
 from multiprocessing import cpu_count
-from os import environ, path, remove, unlink
+from os import environ, path, unlink
 from shutil import rmtree
 from time import perf_counter
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
+from h5py import File
 from joblib import dump, load
 from matplotlib.colors import hsv_to_rgb
 from skimage.filters import (threshold_li, threshold_niblack,
@@ -52,6 +53,39 @@ def create_background_mask(img, thresh_method='yen'):
     return background_mask
 
 
+def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
+    """
+    Create HDF5 dataset.
+
+    Parameters
+    ----------
+    dset_shape: tuple (dtype: int)
+        dataset shape
+
+    dtype:
+        data type of the HDF5 dataset
+
+    chunks: tuple (dtype: int) or bool
+        shape of the chunked storage layout (default: auto chunking)
+
+    Returns
+    -------
+    dset:
+        HDF5 dataset
+
+    file_path: str
+        path to the HDF5 file
+    """
+    if tmp is None:
+        tmp = tempfile.mkdtemp()
+
+    file_path = path.join(tmp, name + '.h5')
+    file = File(file_path, 'w')
+    dset = file.create_dataset(None, dset_shape, chunks=chunks, dtype=dtype)
+
+    return dset, file_path
+
+
 def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r+'):
     """
     Create a memory-map to an array stored in a binary file on disk.
@@ -59,7 +93,7 @@ def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r
     Parameters
     ----------
     shape: tuple
-        shape of the store array
+        shape of the stored array
 
     dtype:
         data-type used to interpret the file contents
@@ -119,6 +153,41 @@ def get_available_cores():
     return num_cpu
 
 
+def get_item_size(dtype):
+    """
+    Get the item size in bytes of a data type.
+
+    Parameters
+    ----------
+    dtype: str
+        data type identifier
+
+    Returns
+    -------
+    item_size: int
+        item size in bytes
+    """
+
+    # data type lists
+    lst_1 = ['uint8', 'int8']
+    lst_2 = ['uint16', 'int16', 'float16', np.float16]
+    lst_3 = ['uint32', 'int32', 'float32', np.float32]
+    lst_4 = ['uint64', 'int64', 'float64', np.float64]
+
+    if dtype in lst_1:
+        item_size = 1
+    elif dtype in lst_2:
+        item_size = 2
+    elif dtype in lst_3:
+        item_size = 4
+    elif dtype in lst_4:
+        item_size = 8
+    else:
+        raise ValueError("Unsupported data type!")
+
+    return item_size
+
+
 def delete_tmp_folder(tmp_dir):
     """
     Delete temporary folder.
@@ -136,28 +205,6 @@ def delete_tmp_folder(tmp_dir):
         rmtree(tmp_dir)
     except OSError:
         pass
-
-
-def delete_tmp_files(file_lst):
-    """
-    Close and remove temporary files.
-
-    Parameters
-    ----------
-    file_lst: list
-        list of temporary file dictionaries
-        ('path': file path; 'obj': file object)
-
-    Returns
-    -------
-    None
-    """
-    if type(file_lst) is not list:
-        file_lst = [file_lst]
-
-    for file in file_lst:
-        file['obj'].close()
-        remove(file['path'])
 
 
 def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
