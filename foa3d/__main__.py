@@ -12,7 +12,7 @@ def foa3d(cli_args):
     # get fiber orientation analysis pipeline configuration
     alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, \
         odf_scales_um, odf_degrees, z_min, z_max, ch_neuron, ch_fiber, \
-        lpf_soma_mask, max_ram_mb, jobs_to_cores, img_name = get_pipeline_config(cli_args, skip_frangi, img_name)
+        lpf_soma_mask, max_ram_mb, jobs, img_name = get_pipeline_config(cli_args, skip_frangi, img_name)
 
     # apply 3D Frangi-based fiber orientation analysis in parallel to batches of basic image slices
     if not skip_frangi:
@@ -21,7 +21,7 @@ def foa3d(cli_args):
                                         alpha=alpha, beta=beta, gamma=gamma, frangi_sigma_um=scales_um,
                                         z_min=z_min, z_max=z_max, lpf_soma_mask=lpf_soma_mask,
                                         ch_neuron=ch_neuron, ch_fiber=ch_fiber, mosaic=mosaic,
-                                        max_ram_mb=max_ram_mb, jobs_to_cores=jobs_to_cores)
+                                        max_ram_mb=max_ram_mb, jobs=jobs)
 
     # estimate 3D fiber ODF maps in parallel over the spatial scales of interest
     if odf_scales_um:

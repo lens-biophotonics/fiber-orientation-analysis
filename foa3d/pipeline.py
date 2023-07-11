@@ -565,7 +565,7 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
 def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir, tmp_dir, img_name, frangi_sigma_um,
                               ch_neuron=0, ch_fiber=1, alpha=0.05, beta=1, gamma=100, dark=False, z_min=0, z_max=None,
                               orient_cmap=False, lpf_soma_mask=False, mosaic=False,
-                              max_ram_mb=None, jobs_to_cores=0.8, backend='threading'):
+                              max_ram_mb=None, jobs=4, backend='threading'):
     """
     Apply 3D Frangi filtering to basic TPFM image slices using parallel threads.
 
@@ -635,9 +635,9 @@ def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir,
     max_ram_mb: float
         maximum RAM available to the Frangi filtering stage [MB]
 
-    jobs_to_cores: float
-        max number of jobs relative to the available CPU cores
-        (default: 80%)
+    jobs: int
+        number of parallel jobs (threads)
+        used by the Frangi filtering stage
 
     backend: str
         backend module employed by joblib.Parallel
@@ -671,7 +671,7 @@ def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir,
 
     # configure batch of basic image slices analyzed in parallel
     batch_size, max_slice_size = \
-        config_frangi_batch(frangi_sigma_um, max_ram_mb=max_ram_mb, jobs_to_cores=jobs_to_cores)
+        config_frangi_batch(frangi_sigma_um, max_ram_mb=max_ram_mb, jobs=jobs)
 
     # convert the spatial scales of the Frangi filter to pixel
     frangi_sigma_px = convert_frangi_scales(frangi_sigma_um, px_size_iso[0])

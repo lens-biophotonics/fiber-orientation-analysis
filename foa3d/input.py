@@ -65,8 +65,8 @@ def get_cli_parser():
                             help='list of Frangi filter scales [μm]')
     cli_parser.add_argument('-n', '--neuron-mask', action='store_true', default=False,
                             help='lipofuscin-based neuronal body masking')
-    cli_parser.add_argument('-j', '--jobs-prc', type=float, default=80.0,
-                            help='maximum parallel jobs relative to the number of available CPU cores (percentage)')
+    cli_parser.add_argument('-j', '--jobs', type=float, default=4,
+                            help='number of parallel threads used by the Frangi filtering stage')
     cli_parser.add_argument('-r', '--ram', type=float, default=None,
                             help='maximum RAM available to the Frangi filtering stage [GB]: use all if None')
     cli_parser.add_argument('-m', '--mmap', action='store_true', default=False,
@@ -245,9 +245,9 @@ def get_pipeline_config(cli_args, vector, img_name):
     max_ram_mb: float
         maximum RAM available to the Frangi filtering stage [MB]
 
-    jobs_to_cores: float
-        max number of jobs relative to the available CPU cores
-        (default: 80%)
+    jobs: int
+        number of parallel jobs (threads)
+        used by the Frangi filtering stage
 
     img_name: str
         microscopy image filename
@@ -266,8 +266,7 @@ def get_pipeline_config(cli_args, vector, img_name):
     ch_fiber = cli_args.ch_fiber
     max_ram = cli_args.ram
     max_ram_mb = None if max_ram is None else max_ram * 1000
-    jobs_prc = cli_args.jobs_prc
-    jobs_to_cores = 1 if jobs_prc >= 100 else 0.01 * jobs_prc
+    jobs = cli_args.jobs
 
     # ODF parameters
     odf_scales_um = cli_args.odf_res
@@ -292,7 +291,7 @@ def get_pipeline_config(cli_args, vector, img_name):
         img_name = pfx + 'img' + img_name
 
     return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
-        z_min, z_max, ch_neuron, ch_fiber, lpf_soma_mask, max_ram_mb, jobs_to_cores, img_name
+        z_min, z_max, ch_neuron, ch_fiber, lpf_soma_mask, max_ram_mb, jobs, img_name
 
 
 def get_resolution(cli_args, vector):

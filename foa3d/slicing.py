@@ -258,7 +258,7 @@ def compute_smoothing_pad_range(smooth_sigma, frangi_sigma, truncate=4):
 
 
 def config_frangi_batch(frangi_scales, mem_growth_factor=149.7, mem_fudge_factor=1.0,
-                        min_slice_size_mb=-1, jobs_to_cores=0.8, max_ram_mb=None):
+                        min_slice_size_mb=-1, jobs=4, max_ram_mb=None):
     """
     Compute size and number of the batches of basic microscopy image slices
     analyzed in parallel.
@@ -278,9 +278,9 @@ def config_frangi_batch(frangi_scales, mem_growth_factor=149.7, mem_fudge_factor
     min_slice_size_mb: float
         minimum slice size in [MB]
 
-    jobs_to_cores: float
-        max number of jobs relative to the available CPU cores
-        (default: 80%)
+    jobs: int
+        number of parallel jobs (threads)
+        used by the Frangi filtering stage
 
     max_ram_mb: float
         maximum RAM available to the Frangi filtering stage [MB]
@@ -305,7 +305,9 @@ def config_frangi_batch(frangi_scales, mem_growth_factor=149.7, mem_fudge_factor
     num_scales = len(frangi_scales)
 
     # initialize slice batch size
-    slice_batch_size = int(jobs_to_cores * num_cpu // num_scales)
+    slice_batch_size = np.min([jobs // num_scales, num_cpu]).astype(int)
+    if slice_batch_size == 0:
+        slice_batch_size = 1
 
     # get image slice size
     slice_size_mb = get_slice_size(max_ram_mb, mem_growth_factor, mem_fudge_factor, slice_batch_size, num_scales)
