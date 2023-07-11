@@ -202,30 +202,30 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6, max_ram_m
 
     # create downsampled background memory map
     bg_shape = tuple(np.flip(odi_shape))
-    bg_mrtrix = init_volume(bg_shape, dtype='uint8', chunks=tuple(bg_shape[:2]) + (1,),
-                            name='bg_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
+    bg_mrtrix, _ = init_volume(bg_shape, dtype='uint8', chunks=tuple(bg_shape[:2]) + (1,),
+                               name='bg_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
 
     # create ODF memory map
     num_coeff = get_sph_harm_ncoeff(odf_degrees)
     odf_shape = odi_shape + (num_coeff,)
-    odf = init_volume(odf_shape, dtype='float32', chunks=(1, 1, 1, num_coeff),
-                      name='odf_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
+    odf, _ = init_volume(odf_shape, dtype='float32', chunks=(1, 1, 1, num_coeff),
+                         name='odf_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
 
     # create orientation tensor memory map
     vec_tensor_shape = odi_shape + (3,)
-    vec_tensor_eigen = \
+    vec_tensor_eigen, _ = \
         init_volume(vec_tensor_shape, dtype='float32', chunks=(1, 1, 1, 3),
                     name='tensor_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
 
     # create ODI memory maps
-    odi_pri = init_volume(odi_shape, dtype='uint8',
-                          name='odi_pri_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
-    odi_sec = init_volume(odi_shape, dtype='uint8',
-                          name='odi_sec_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
-    odi_tot = init_volume(odi_shape, dtype='uint8',
-                          name='odi_tot_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
-    odi_anis = init_volume(odi_shape, dtype='uint8',
-                           name='odi_anis_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
+    odi_pri, _ = init_volume(odi_shape, dtype='uint8',
+                             name='odi_pri_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
+    odi_sec, _ = init_volume(odi_shape, dtype='uint8',
+                             name='odi_sec_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
+    odi_tot, _ = init_volume(odi_shape, dtype='uint8',
+                             name='odi_tot_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
+    odi_anis, _ = init_volume(odi_shape, dtype='uint8',
+                              name='odi_anis_tmp{0}'.format(odf_scale), tmp=tmp_dir, max_ram_mb=max_ram_mb)
 
     return odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, vec_tensor_eigen
 
