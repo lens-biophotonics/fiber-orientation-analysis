@@ -9,12 +9,12 @@ def foa3d(cli_args):
     # load microscopy volume image or array of fiber orientation vectors
     img, mosaic, skip_frangi, cli_args, save_subdirs, tmp_dir, img_name = load_microscopy_image(cli_args)
 
-    # get fiber orientation analysis pipeline configuration
+    # get the fiber orientation analysis pipeline configuration
     alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, \
         odf_scales_um, odf_degrees, z_min, z_max, ch_neuron, ch_fiber, \
         lpf_soma_mask, max_ram_mb, jobs, img_name = get_pipeline_config(cli_args, skip_frangi, img_name)
 
-    # apply 3D Frangi-based fiber orientation analysis in parallel to batches of basic image slices
+    # conduct parallel 3D Frangi-based fiber orientation analysis on a batch of basic image slices
     if not skip_frangi:
         fiber_vec_img, iso_fiber_img \
             = parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_subdirs[0], tmp_dir, img_name,
