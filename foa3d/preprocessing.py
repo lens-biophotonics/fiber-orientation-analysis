@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage.transform import resize
 
-from foa3d.printing import color_text, print_prepro_heading
+from foa3d.printing import print_prepro_heading
 from foa3d.utils import fwhm_to_sigma
 
 
@@ -35,6 +35,7 @@ def config_anisotropy_correction(px_size, psf_fwhm, vector):
     px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
         new isotropic pixel size [μm]
     """
+
     # print preprocessing heading
     if not vector:
         print_prepro_heading()
@@ -61,7 +62,6 @@ def config_anisotropy_correction(px_size, psf_fwhm, vector):
         # print preprocessing info
         gauss_sigma_um = np.multiply(smooth_sigma, px_size)
         if not vector:
-            print(color_text(0, 191, 255, "\n(lateral PSF degradation)"))
             print("\n                              Z      Y      X")
             print("Gaussian blur  \u03C3     [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
                   .format(gauss_sigma_um[0], gauss_sigma_um[1], gauss_sigma_um[2]), end='\r')
@@ -82,7 +82,7 @@ def config_anisotropy_correction(px_size, psf_fwhm, vector):
 
 
 def correct_image_anisotropy(img, rsz_ratio,
-                             sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, truncate=4):
+                             sigma=None, pad_mat=None, pad_mode='reflect', anti_aliasing=True, trunc=4):
     """
     Smooth the input volume image along the X and Y axes so that the lateral
     and longitudinal sizes of the optical system's PSF become equal.
@@ -90,7 +90,7 @@ def correct_image_anisotropy(img, rsz_ratio,
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         microscopy volume image
 
     rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
@@ -109,12 +109,12 @@ def correct_image_anisotropy(img, rsz_ratio,
     anti_aliasing: bool
         if True, apply an anti-aliasing filter when downsampling the XY plane
 
-    truncate: int
+    trunc: int
         truncate the Gaussian kernel at this many standard deviations
 
     Returns
     -------
-    iso_img: numpy.ndarray (shape=(Z,Y,X))
+    iso_img: numpy.ndarray (axis order=(Z,Y,X))
         isotropic microscopy volume image
 
     rsz_pad_mat: numpy.ndarray (shape=(3,2), dtype=int)
@@ -127,7 +127,7 @@ def correct_image_anisotropy(img, rsz_ratio,
     # lateral blurring
     else:
         if sigma is not None:
-            img = gaussian_filter(img, sigma=sigma, mode=pad_mode, truncate=truncate, output=np.float32)
+            img = gaussian_filter(img, sigma=sigma, mode=pad_mode, truncate=trunc, output=np.float32)
 
         # lateral downsampling
         iso_shape = np.ceil(np.multiply(np.asarray(img.shape), rsz_ratio)).astype(int)

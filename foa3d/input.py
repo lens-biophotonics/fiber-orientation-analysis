@@ -2,6 +2,7 @@ import argparse
 import tempfile
 from time import perf_counter
 
+import h5py
 import numpy as np
 import tifffile as tiff
 
@@ -54,7 +55,7 @@ def get_cli_parser():
                                  '* supported formats: .tif (image), '
                                  '.npy (image or fiber vectors), .yml (ZetaStitcher stitch file)\n'
                                  '* image  axes order: (Z, Y, X)\n'
-                                 '* vector axes order: (Z, Y, X, 3)')
+                                 '* vector axes order: (Z, Y, X, C)')
     cli_parser.add_argument('-a', '--alpha', type=float, default=0.001,
                             help='Frangi plate-like object sensitivity')
     cli_parser.add_argument('-b', '--beta', type=float, default=1.0,
@@ -65,8 +66,9 @@ def get_cli_parser():
                             help='list of Frangi filter scales [μm]')
     cli_parser.add_argument('-n', '--neuron-mask', action='store_true', default=False,
                             help='lipofuscin-based neuronal body masking')
-    cli_parser.add_argument('-j', '--jobs-prc', type=float, default=80.0,
-                            help='maximum parallel jobs relative to the number of available CPU cores (percentage)')
+    cli_parser.add_argument('-j', '--jobs', type=int, default=None,
+                            help='number of parallel threads used by the Frangi filtering stage: '
+                                 'use one thread per logical core if None')
     cli_parser.add_argument('-r', '--ram', type=float, default=None,
                             help='maximum RAM available to the Frangi filtering stage [GB]: use all if None')
     cli_parser.add_argument('-m', '--mmap', action='store_true', default=False,
@@ -123,6 +125,7 @@ def get_image_info(img, px_size, ch_fiber, mosaic=False, ch_axis=None):
     img_item_size: int
         array item size (in bytes)
     """
+
     # adapt channel axis
     img_shape = np.asarray(img.shape)
     ndim = len(img_shape)
@@ -168,19 +171,20 @@ def get_image_file(cli_args):
         increasing the parallel processing performance
         (the image will be preliminarily loaded to RAM)
     """
+
+    # get microscopy image path and name
     in_mmap = cli_args.mmap
     img_path = cli_args.image_path
     img_name = path.basename(img_path)
     split_name = img_name.split('.')
 
+    # check image format
     if len(split_name) == 1:
         raise ValueError('Format must be specified for input volume images!')
     else:
-        mosaic = False
         img_fmt = split_name[-1]
         img_name = img_name.replace('.' + split_name[-1], '')
-        if img_fmt == 'yml':
-            mosaic = True
+        mosaic = True if img_fmt == 'yml' else False
 
     return img_path, img_name, img_fmt, mosaic, in_mmap
 
@@ -245,13 +249,14 @@ def get_pipeline_config(cli_args, vector, img_name):
     max_ram_mb: float
         maximum RAM available to the Frangi filtering stage [MB]
 
-    jobs_to_cores: float
-        max number of jobs relative to the available CPU cores
-        (default: 80%)
+    jobs: int
+        number of parallel jobs (threads)
+        used by the Frangi filtering stage
 
     img_name: str
         microscopy image filename
     """
+
     # Frangi filter parameters
     alpha = cli_args.alpha
     beta = cli_args.beta
@@ -266,8 +271,7 @@ def get_pipeline_config(cli_args, vector, img_name):
     ch_fiber = cli_args.ch_fiber
     max_ram = cli_args.ram
     max_ram_mb = None if max_ram is None else max_ram * 1000
-    jobs_prc = cli_args.jobs_prc
-    jobs_to_cores = 1 if jobs_prc >= 100 else 0.01 * jobs_prc
+    jobs = cli_args.jobs
 
     # ODF parameters
     odf_scales_um = cli_args.odf_res
@@ -289,10 +293,10 @@ def get_pipeline_config(cli_args, vector, img_name):
     # add pipeline configuration prefix to output filenames
     if not vector:
         pfx = get_output_prefix(scales_um, alpha, beta, gamma)
-        img_name = pfx + 'img' + img_name
+        img_name = '{}img{}'.format(pfx, img_name)
 
     return alpha, beta, gamma, scales_um, smooth_sigma, px_size, px_size_iso, odf_scales_um, odf_degrees, \
-        z_min, z_max, ch_neuron, ch_fiber, lpf_soma_mask, max_ram_mb, jobs_to_cores, img_name
+        z_min, z_max, ch_neuron, ch_fiber, lpf_soma_mask, max_ram_mb, jobs, img_name
 
 
 def get_resolution(cli_args, vector):
@@ -315,6 +319,7 @@ def get_resolution(cli_args, vector):
     psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
         3D PSF FWHM [μm]
     """
+
     # pixel size
     px_size_z = cli_args.px_size_z
     px_size_xy = cli_args.px_size_xy
@@ -324,6 +329,7 @@ def get_resolution(cli_args, vector):
     psf_fwhm_y = cli_args.psf_fwhm_y
     psf_fwhm_x = cli_args.psf_fwhm_x
 
+    # create arrays
     px_size = np.array([px_size_z, px_size_xy, px_size_xy])
     psf_fwhm = np.array([psf_fwhm_z, psf_fwhm_y, psf_fwhm_x])
 
@@ -337,9 +343,9 @@ def get_resolution(cli_args, vector):
 def load_microscopy_image(cli_args):
     """
     Load microscopy volume image from TIFF, NumPy or ZetaStitcher .yml file.
-    Alternatively, the processing pipeline accepts as input .npy files of
-    fiber orientation vector data:
-    in this case, the Frangi filter stage will be skipped.
+    Alternatively, the processing pipeline accepts as input .npy or HDF5
+    files of fiber orientation vector data: in this case, the Frangi filter
+    stage will be skipped.
 
     Parameters
     ----------
@@ -348,7 +354,7 @@ def load_microscopy_image(cli_args):
 
     Returns
     -------
-    img: NumPy memory map
+    img: numpy.ndarray or NumPy memory map
         microscopy volume image or array of fiber orientation vectors
 
     mosaic: bool
@@ -370,6 +376,7 @@ def load_microscopy_image(cli_args):
     img_name: str
         microscopy image filename
     """
+
     # initialize variables
     skip_frangi = False
     skip_odf = cli_args.odf_res is None
@@ -382,20 +389,24 @@ def load_microscopy_image(cli_args):
     tic = perf_counter()
 
     # fiber orientation vector data
-    if img_fmt == 'npy':
+    if img_fmt == 'npy' or img_fmt == 'h5':
 
         # print heading
         print(color_text(0, 191, 255, "\nFiber Orientation Data Import\n"))
 
         # load fiber orientations
-        img = np.load(img_path, mmap_mode='r')
+        if img_fmt == 'npy':
+            img = np.load(img_path, mmap_mode='r')
+        else:
+            img_file = h5py.File(img_path, 'r')
+            img = img_file.get(img_file.keys()[0])
 
         # check dimensions
         if img.ndim != 4:
             raise ValueError('Invalid fiber orientation dataset (ndim != 4)')
         else:
             skip_frangi = True
-            print("Loading " + img_name + " orientation dataset...\n")
+            print("Loading {} orientation dataset...\n".format(img_name))
 
     # microscopy volume image
     else:
@@ -404,12 +415,12 @@ def load_microscopy_image(cli_args):
 
         # load microscopy tiled reconstruction (aligned using ZetaStitcher)
         if mosaic:
-            print("Loading " + img_name + " tiled reconstruction...\n")
+            print("Loading {} tiled reconstruction...\n".format(img_name))
             img = VirtualFusedVolume(img_path)
 
         # load microscopy z-stack
         else:
-            print("Loading " + img_name + " z-stack...\n")
+            print("Loading {} z-stack...\n".format(img_name))
             img_fmt = img_fmt.lower()
             if img_fmt == 'npy':
                 img = np.load(img_path)
@@ -430,10 +441,7 @@ def load_microscopy_image(cli_args):
     print_import_time(tic)
 
     # print volume image shape
-    if not skip_frangi:
-        print_image_shape(cli_args, img, mosaic)
-    else:
-        print()
+    print_image_shape(cli_args, img, mosaic) if not skip_frangi else print()
 
     # create saving directory
     save_subdirs = create_save_dirs(img_path, img_name, skip_frangi=skip_frangi, skip_odf=skip_odf)

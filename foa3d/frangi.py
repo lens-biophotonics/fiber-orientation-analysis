@@ -8,7 +8,7 @@ from scipy import ndimage as ndi
 from foa3d.utils import divide_nonzero
 
 
-def analyze_hessian_eigen(img, sigma, truncate=4):
+def analyze_hessian_eigen(img, sigma, trunc=4):
     """
     Return the eigenvalues of the local Hessian matrices
     of the input image array, sorted by absolute value (in ascending order),
@@ -16,25 +16,26 @@ def analyze_hessian_eigen(img, sigma, truncate=4):
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         microscopy volume image
 
     sigma: int
         spatial scale [px]
 
-    truncate: int
+    trunc: int
         truncate the Gaussian smoothing kernel at this many standard deviations
 
     Returns
     -------
-    eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
 
-    dom_eigenvec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    dom_eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvectors related to the dominant (minimum) eigenvalue
     """
+
     # compute scaled Hessian matrices
-    hessian = compute_scaled_hessian(img, sigma=sigma, truncate=truncate)
+    hessian = compute_scaled_hessian(img, sigma=sigma, trunc=trunc)
 
     # compute Hessian eigenvalues and orientation vectors
     # related to the dominant one
@@ -50,17 +51,18 @@ def compute_dominant_eigen(hessian):
 
     Parameters
     ----------
-    hessian: numpy.ndarray (shape=(Z,Y,X,3,3), dtype=float)
+    hessian: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
         input array of local Hessian matrices
 
     Returns
     -------
-    sorted_eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    sorted_eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
 
-    dom_eigenvec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    dom_eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvectors related to the dominant (minimum) eigenvalue
     """
+
     # compute and sort the eigenvalues/eigenvectors
     # of the image Hessian matrices
     eigenval, eigenvec = np.linalg.eigh(hessian)
@@ -78,13 +80,13 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
 
     Parameters
     ----------
-    eigen1: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen1: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         lowest Hessian eigenvalue (i.e., the dominant eigenvalue)
 
-    eigen2: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen2: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         middle Hessian eigenvalue
 
-    eigen3: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen3: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         highest Hessian eigenvalue
 
     gamma: float
@@ -92,19 +94,20 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
 
     Returns
     -------
-    ra: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    ra: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         plate-like object score
 
-    rb: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    rb: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         blob-like object score
 
-    s: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    s: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
        second-order structureness
 
     gamma: float
         background score sensitivity
         (automatically computed if not provided as input)
     """
+
     ra = divide_nonzero(np.abs(eigen2), np.abs(eigen3))
     rb = divide_nonzero(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
     s = compute_structureness(eigen1, eigen2, eigen3)
@@ -116,32 +119,33 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
     return ra, rb, s, gamma
 
 
-def compute_scaled_hessian(img, sigma=1, truncate=4):
+def compute_scaled_hessian(img, sigma=1, trunc=4):
     """
     Computes the scaled and normalized Hessian matrices of the input image.
     This is then used to estimate Frangi's vesselness probability score.
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         microscopy volume image
 
     sigma: int
         spatial scale [px]
 
-    truncate: int
+    trunc: int
         truncate the Gaussian smoothing kernel at this many standard deviations
 
     Returns
     -------
-    hessian: numpy.ndarray (shape=(Z,Y,X,3,3), dtype=float)
+    hessian: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
         Hessian matrix of image second derivatives
     """
+
     # get number of dimensions
     ndim = img.ndim
 
     # scale selection
-    scaled_img = ndi.gaussian_filter(img, sigma=sigma, output=np.float32, truncate=truncate)
+    scaled_img = ndi.gaussian_filter(img, sigma=sigma, output=np.float32, truncate=trunc)
 
     # compute the first order gradients
     gradient_list = np.gradient(scaled_img)
@@ -177,7 +181,7 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
     scale_px: int
         spatial scale [px]
 
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         microscopy volume image
 
     alpha: float
@@ -195,15 +199,16 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
 
     Returns
     -------
-    enhanced_img: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    enhanced_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
-    eigenvec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    eigenvec: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
         3D orientation map at the input spatial scale
 
-    eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
     """
+
     # Hessian matrix estimation and eigenvalue decomposition
     eigenval, eigenvec = analyze_hessian_eigen(img, scale_px)
 
@@ -226,13 +231,13 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
 
     Parameters
     ----------
-    eigen1: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen1: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         lowest Hessian eigenvalue (i.e., the dominant eigenvalue)
 
-    eigen2: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen2: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         middle Hessian eigenvalue
 
-    eigen3: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen3: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         highest Hessian eigenvalue
 
     alpha: float
@@ -246,9 +251,10 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
 
     Returns
     -------
-    vesselness: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    vesselness: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
     """
+
     ra, rb, s, gamma = compute_frangi_features(eigen1, eigen2, eigen3, gamma)
     plate = compute_plate_like_score(ra, alpha)
     blob = compute_blob_like_score(rb, beta)
@@ -275,6 +281,7 @@ def convert_frangi_scales(scales_um, px_size):
     scales_px: numpy.ndarray (dtype=int)
         Frangi filter scales [px]
     """
+
     scales_um = np.asarray(scales_um)
     scales_px = scales_um / px_size
 
@@ -287,7 +294,7 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         microscopy volume image
 
     scales_px: int or numpy.ndarray (dtype=int)
@@ -308,15 +315,16 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
 
     Returns
     -------
-    enhanced_img: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    enhanced_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
-    fiber_vec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    fiber_vec: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
         3D fiber orientation map
 
-    eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
     """
+
     # single-scale vesselness analysis
     n_scales = len(scales_px)
     if n_scales == 1:
@@ -358,13 +366,13 @@ def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
 
     Parameters
     ----------
-    vesselness: numpy.ndarray (shape=(Z,Y,X))
+    vesselness: numpy.ndarray (axis order=(Z,Y,X))
         Frangi's vesselness likelihood image
 
-    eigen2: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen2: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         middle Hessian eigenvalue
 
-    eigen3: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    eigen3: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         highest Hessian eigenvalue
 
     dark: bool
@@ -373,9 +381,10 @@ def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
 
     Returns
     -------
-    vesselness: numpy.ndarray (shape=(Z,Y,X))
+    vesselness: numpy.ndarray (axis order=(Z,Y,X))
         masked Frangi's vesselness likelihood image
     """
+
     if dark:
         vesselness[eigen2 < 0] = 0
         vesselness[eigen3 < 0] = 0
@@ -394,10 +403,10 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
 
     Parameters
     ----------
-    eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         original eigenvalue array
 
-    eigenvec: numpy.ndarray (shape=(Z,Y,X,3,3), dtype=float)
+    eigenvec: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
         original eigenvector array
 
     axis: int
@@ -405,12 +414,13 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
 
     Returns
     -------
-    sorted_eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    sorted_eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         sorted eigenvalue array (ascending order)
 
-    sorted_eigenvec: numpy.ndarray (shape=(Z,Y,X,3,3), dtype=float)
+    sorted_eigenvec: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
         sorted eigenvector array
     """
+
     # sort the eigenvalue array by absolute value (ascending order)
     sorted_val_index = np.abs(eigenval).argsort(axis)
     sorted_eigenval = np.take_along_axis(eigenval, sorted_val_index, axis)

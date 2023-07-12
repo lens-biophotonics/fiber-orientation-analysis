@@ -17,7 +17,7 @@ def compute_fiber_angles(fiber_vec, norm):
     ----------
     fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
-        (reshaped super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
+        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
     norm: numpy.ndarray (shape=(N,), dtype=float)
         2-norm of fiber orientation vectors
@@ -30,6 +30,7 @@ def compute_fiber_angles(fiber_vec, norm):
     theta: numpy.ndarray (shape=(N,), dtype=float)
         fiber polar angle [rad]
     """
+
     fiber_vec = fiber_vec[norm > 0, :]
     phi = np.arctan2(fiber_vec[:, 1], fiber_vec[:, 2])
     theta = np.arccos(fiber_vec[:, 0] / norm[norm > 0])
@@ -44,24 +45,25 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
 
     Parameters
     ----------
-    vec_tensor_eigen: numpy.ndarray (shape=(Z,Y,X,3), dtype=float32)
+    vec_tensor_eigen: numpy.ndarray (axis orde=(Z,Y,X,C), dtype=float32)
         orientation tensor eigenvalues
         computed from an ODF super-voxel
 
     Returns
     -------
-    odi_pri: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_pri: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion index
 
-    odi_sec: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_sec: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         secondary orientation dispersion index
 
-    odi_tot: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_tot: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         total orientation dispersion index
 
-    odi_anis: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_anis: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         orientation dispersion index anisotropy
     """
+
     k1 = np.abs(vec_tensor_eigen[..., 2])
     k2 = np.abs(vec_tensor_eigen[..., 1])
     k3 = np.abs(vec_tensor_eigen[..., 0])
@@ -93,7 +95,7 @@ def mask_orientation_dispersion(odi_tpl, vec_tensor_eigen):
         tuple including the ODI maps estimated
         in compute_orientation_dispersion()
 
-    vec_tensor_eigen: numpy.ndarray (shape=(Z,Y,X,3), dtype=float32)
+    vec_tensor_eigen: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float32)
         orientation tensor eigenvalues
         computed from an ODF super-voxel
 
@@ -102,6 +104,7 @@ def mask_orientation_dispersion(odi_tpl, vec_tensor_eigen):
     odi_tpl: tuple
         updated tuple including the masked ODI maps
     """
+
     bg_msk = np.all(vec_tensor_eigen == 0, axis=-1)
 
     odi_lst = list(odi_tpl)
@@ -144,6 +147,7 @@ def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors
     real_sph_harm: float
         real-valued spherical harmonic coefficient
     """
+
     if degree == 0:
         real_sph_harm = norm_factors[0, 0]
     elif degree == 2:
@@ -171,13 +175,14 @@ def compute_vec_tensor_eigen(fiber_vec):
     ----------
     fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
         fiber orientation vectors
-        (reshaped super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
+        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
     Returns
     -------
     vec_tensor_eigen: numpy.ndarray (shape=(3,), dtype=float32)
         orientation tensor eigenvalues in ascending order
     """
+
     fiber_vec = np.delete(fiber_vec, np.all(fiber_vec == 0, axis=-1), axis=0)
     fiber_vec.shape = (-1, 3)
     t = np.zeros((3, 3))
@@ -197,25 +202,25 @@ def estimate_odf_coeff(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_
 
     Parameters
     ----------
-    fiber_vec: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    fiber_vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         fiber orientation vectors
 
-    odf: NumPy memory-map object (shape=(X,Y,Z,3), dtype=float32)
+    odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
         initialized array of ODF spherical harmonics coefficients
 
-    odi_pri: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of primary orientation dispersion parameters
 
-    odi_sec: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of secondary orientation dispersion parameters
 
-    odi_tot: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of total orientation dispersion parameters
 
-    odi_anis: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of orientation dispersion anisotropy parameters
 
-    vec_tensor_eigen: NumPy memory-map object (shape=(Z,Y,X,3), dtype=uint8)
+    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=uint8)
         initialized array of orientation tensor eigenvalues
 
     vxl_side: int
@@ -235,21 +240,22 @@ def estimate_odf_coeff(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_
 
     Returns
     -------
-    odf: numpy.ndarray (shape=(Z,Y,X,ncoeff), dtype=float32)
+    odf: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float32)
         volumetric map of real-valued spherical harmonics coefficients
 
-    odi_pri: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_pri: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion index
 
-    odi_sec: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_sec: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         secondary orientation dispersion index
 
-    odi_tot: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_tot: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         total orientation dispersion index
 
-    odi_anis: numpy.ndarray (shape=(Z,Y,X), dtype=float32)
+    odi_anis: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         orientation dispersion index anisotropy
     """
+
     # compute spherical harmonics normalization factors (once)
     odf_norm = get_sph_harm_norm_factors(odf_degrees)
 
@@ -336,11 +342,11 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
     ----------
     phi: numpy.ndarray (shape=(N,), dtype=float)
         fiber azimuth angles [rad]
-        (reshaped super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
+        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
     theta: numpy.ndarray (shape=(N,), dtype=float)
         fiber polar angle [rad]
-        (reshaped super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
+        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
     degrees: int
         degrees of the spherical harmonics expansion
@@ -357,6 +363,7 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
         array of real-valued spherical harmonics coefficients
         building the spherical harmonics series expansion
     """
+
     real_sph_harm = np.zeros(ncoeff)
     i = 0
     for n in np.arange(0, degrees + 1, 2):
@@ -365,7 +372,7 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
                 real_sph_harm[i] += compute_real_sph_harm(n, m, p, np.sin(t), np.cos(t), norm_factors)
             i += 1
 
-    real_sph_harm = real_sph_harm / phi.size
+    real_sph_harm /= phi.size
 
     return real_sph_harm
 
@@ -379,7 +386,7 @@ def fiber_vectors_to_sph_harm(fiber_vec, degrees, norm_factors):
     ----------
     fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
-        (reshaped super-voxel of shape=(Z,Y,X), i.e. N=Z*Y*X)
+        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
     degrees: int
         degrees of the spherical harmonics expansion
@@ -392,6 +399,7 @@ def fiber_vectors_to_sph_harm(fiber_vec, degrees, norm_factors):
     real_sph_harm: numpy.ndarray (shape=(ncoeff,), dtype=float)
         real-valued spherical harmonics coefficients
     """
+
     fiber_vec.shape = (-1, 3)
     ncoeff = get_sph_harm_ncoeff(degrees)
 
@@ -413,11 +421,12 @@ def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
 
     Parameters
     ----------
-    bg_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8; or shape=(Z,Y,X,3), dtype=float32)
+    bg_img: NumPy memory-map object or HDF5 dataset
+                  (axis order=(Z,Y,X), dtype=uint8; or axis order=(Z,Y,X,C), dtype=float32)
         fiber volume image or orientation vector volume
         to be used as the MRtrix3 background image
 
-    bg_mrtrix_mmap: NumPy memory-map object (shape=(X,Y,Z), dtype=uint8)
+    bg_mrtrix_mmap: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
         initialized background array for ODF visualization in MRtrix3
 
     vxl_side: int
@@ -425,9 +434,10 @@ def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
 
     Returns
     -------
-    bg_mrtrix_mmap: NumPy memory-map object (shape=(X,Y,Z), dtype=uint8)
+    bg_mrtrix_mmap: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
         downsampled background for ODF visualization in MRtrix3
     """
+
     # get shape of new downsampled array
     new_shape = bg_mrtrix_mmap.shape[:-1]
 
@@ -487,6 +497,7 @@ def get_sph_harm_norm_factors(degrees):
     norm_factors: numpy.ndarray (dtype: float)
         2D array of spherical harmonics normalization factors
     """
+
     norm_factors = np.zeros(shape=(degrees + 1, 2 * degrees + 1))
     for n in np.arange(0, degrees + 1, 2):
         for m in np.arange(0, n + 1, 1):
@@ -516,6 +527,7 @@ def norm_factor(n, m):
     nf: float
         normalization factor
     """
+
     if m == 0:
         nf = np.sqrt((2 * n + 1) / (4 * np.pi))
     else:

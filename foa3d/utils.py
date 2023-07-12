@@ -1,12 +1,13 @@
 import gc
 import tempfile
 from multiprocessing import cpu_count
-from os import environ, path, remove, unlink
+from os import environ, path, unlink
 from shutil import rmtree
 from time import perf_counter
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
+from h5py import File
 from joblib import dump, load
 from matplotlib.colors import hsv_to_rgb
 from skimage.filters import (threshold_li, threshold_niblack,
@@ -31,6 +32,7 @@ def create_background_mask(img, thresh_method='yen'):
     background_mask: numpy.ndarray (shape=(Z,Y,X), dtype=bool)
         boolean background mask
     """
+
     # select thresholding method
     if thresh_method == 'li':
         initial_li_guess = np.mean(img[img != 0])
@@ -52,6 +54,40 @@ def create_background_mask(img, thresh_method='yen'):
     return background_mask
 
 
+def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
+    """
+    Create HDF5 dataset.
+
+    Parameters
+    ----------
+    dset_shape: tuple (dtype: int)
+        dataset shape
+
+    dtype:
+        data type of the HDF5 dataset
+
+    chunks: tuple (dtype: int) or bool
+        shape of the chunked storage layout (default: auto chunking)
+
+    Returns
+    -------
+    dset:
+        HDF5 dataset
+
+    file_path: str
+        path to the HDF5 file
+    """
+
+    if tmp is None:
+        tmp = tempfile.mkdtemp()
+
+    file_path = path.join(tmp, name + '.h5')
+    file = File(file_path, 'w')
+    dset = file.create_dataset(None, dset_shape, chunks=chunks, dtype=dtype)
+
+    return dset, file_path
+
+
 def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r+'):
     """
     Create a memory-map to an array stored in a binary file on disk.
@@ -59,7 +95,7 @@ def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r
     Parameters
     ----------
     shape: tuple
-        shape of the store array
+        shape of the stored array
 
     dtype:
         data-type used to interpret the file contents
@@ -81,6 +117,7 @@ def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r
     mmap: NumPy memory map
         memory-mapped array
     """
+
     if tmp is None:
         tmp = tempfile.mkdtemp()
     mmap_path = path.join(tmp, name + '.mmap')
@@ -110,6 +147,7 @@ def get_available_cores():
     num_cpu: int
         number of available cores
     """
+
     num_cpu = environ.pop('OMP_NUM_THREADS', default=None)
     if num_cpu is None:
         num_cpu = cpu_count()
@@ -117,6 +155,41 @@ def get_available_cores():
         num_cpu = int(num_cpu)
 
     return num_cpu
+
+
+def get_item_size(dtype):
+    """
+    Get the item size in bytes of a data type.
+
+    Parameters
+    ----------
+    dtype: str
+        data type identifier
+
+    Returns
+    -------
+    item_size: int
+        item size in bytes
+    """
+
+    # data type lists
+    lst_1 = ['uint8', 'int8']
+    lst_2 = ['uint16', 'int16', 'float16', np.float16]
+    lst_3 = ['uint32', 'int32', 'float32', np.float32]
+    lst_4 = ['uint64', 'int64', 'float64', np.float64]
+
+    if dtype in lst_1:
+        item_size = 1
+    elif dtype in lst_2:
+        item_size = 2
+    elif dtype in lst_3:
+        item_size = 4
+    elif dtype in lst_4:
+        item_size = 8
+    else:
+        raise ValueError("Unsupported data type!")
+
+    return item_size
 
 
 def delete_tmp_folder(tmp_dir):
@@ -136,28 +209,6 @@ def delete_tmp_folder(tmp_dir):
         rmtree(tmp_dir)
     except OSError:
         pass
-
-
-def delete_tmp_files(file_lst):
-    """
-    Close and remove temporary files.
-
-    Parameters
-    ----------
-    file_lst: list
-        list of temporary file dictionaries
-        ('path': file path; 'obj': file object)
-
-    Returns
-    -------
-    None
-    """
-    if type(file_lst) is not list:
-        file_lst = [file_lst]
-
-    for file in file_lst:
-        file['obj'].close()
-        remove(file['path'])
 
 
 def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
@@ -180,6 +231,7 @@ def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
     divided: numpy.ndarray
         divided array
     """
+
     denominator = np.copy(nd_array2)
     denominator[denominator == 0] = new_value
     divided = np.divide(nd_array1, denominator)
@@ -207,6 +259,7 @@ def elapsed_time(start_time):
     secs: float
         seconds
     """
+
     stop_time = perf_counter()
     total = stop_time - start_time
     mins = total // 60
@@ -249,6 +302,7 @@ def get_item_bytes(data):
     bytes: int
         item size in bytes
     """
+
     # get data type
     data_type = data.dtype
 
@@ -285,6 +339,7 @@ def get_output_prefix(scales_um, alpha, beta, gamma):
     pfx: str
         pipeline configuration prefix
     """
+
     pfx = 'sc'
     for s in scales_um:
         pfx = pfx + str(s) + '_'
@@ -331,7 +386,7 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
 
     # check limits
     if lower >= upper:
-        raise ValueError("  Invalid lower and upper limits: (%s, %s)" % (lower, upper))
+        raise ValueError("Invalid lower and upper limits: (%s, %s)" % (lower, upper))
 
     # view
     norm_angle = angle
@@ -378,6 +433,7 @@ def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     norm_img: numpy.ndarray
         normalized image
     """
+
     # get min and max values
     min_val = np.min(img)
     max_val = np.max(img)
@@ -400,14 +456,15 @@ def orient_colormap(vec_img):
 
     Parameters
     ----------
-    vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_img: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         orientation vectors
 
     Returns
     -------
-    rgb_map: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
+    rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
+
     # get input array shape
     vec_img_shape = vec_img.shape
 
@@ -487,6 +544,7 @@ def transform_axes(nd_array, flipped=None, swapped=None, expand=None):
     nd_array: numpy.ndarray
         transformed data array
     """
+
     if flipped is not None:
         nd_array = np.flip(nd_array, axis=flipped)
 
@@ -506,14 +564,15 @@ def vector_colormap(vec_img):
 
     Parameters
     ----------
-    vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_img: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         n-dimensional array of orientation vectors
 
     Returns
     -------
-    rgb_map: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
+    rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
+
     # get input array shape
     vec_img_shape = vec_img.shape
 
