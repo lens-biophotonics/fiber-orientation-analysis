@@ -207,7 +207,7 @@ def compute_overlap_range(smooth_sigma, frangi_sigma, truncate=4):
 
 
 def config_frangi_batch(frangi_scales, mem_growth_factor=149.7, mem_fudge_factor=1.0,
-                        min_slice_size_mb=-1, jobs=4, max_ram_mb=None):
+                        min_slice_size_mb=-1, jobs=None, max_ram_mb=None):
     """
     Compute size and number of the batches of basic microscopy image slices
     analyzed in parallel.
@@ -249,6 +249,8 @@ def config_frangi_batch(frangi_scales, mem_growth_factor=149.7, mem_fudge_factor
 
     # number of logical cores
     num_cpu = get_available_cores()
+    if jobs is None:
+        jobs = num_cpu
 
     # number of spatial scales
     num_scales = len(frangi_scales)

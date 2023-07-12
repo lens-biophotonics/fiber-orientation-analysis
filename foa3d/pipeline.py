@@ -29,7 +29,7 @@ def compute_fractional_anisotropy(eigenval):
 
     Parameters
     ----------
-    eigenval: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         structure tensor eigenvalues (best local spatial scale)
 
     Returns
@@ -37,6 +37,7 @@ def compute_fractional_anisotropy(eigenval):
     frac_anis: numpy.ndarray (shape=(3,), dtype=float)
         fractional anisotropy
     """
+
     frac_anis = \
         np.sqrt(0.5 * divide_nonzero(
                 (eigenval[..., 0] - eigenval[..., 1]) ** 2 +
@@ -58,7 +59,8 @@ def init_frangi_volumes(img_shape, slice_shape, resize_ratio, tmp_dir,
         volume image shape [px]
 
     slice_shape: numpy.ndarray (shape=(3,), dtype=int)
-        shape of the basic image slices analyzed iteratively [px]
+        shape of the basic image slices
+        analyzed using parallel threads [px]
 
     resize_ratio: numpy.ndarray (shape=(3,), dtype=float)
         3D image resize ratio
@@ -84,30 +86,31 @@ def init_frangi_volumes(img_shape, slice_shape, resize_ratio, tmp_dir,
         path to initialized fiber orientation HDF5 dataset
         (not fitting the available RAM)
 
-    fiber_vec_img: NumPy memory-map object (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         initialized fiber orientation volume image
 
-    fiber_vec_clr: NumPy memory-map object (shape=(Z,Y,X,3), dtype=uint8)
+    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         initialized orientation colormap image
 
-    frac_anis_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized fractional anisotropy image
 
-    frangi_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized Frangi-enhanced image
 
-    fiber_msk: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized fiber mask image
 
-    iso_fiber_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized fiber image (isotropic resolution)
 
-    neuron_msk: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    neuron_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized neuron mask image
 
     z_sel: NumPy slice object
         selected z-depth range
     """
+
     # shape copies
     img_shape = img_shape.copy()
     slice_shape = slice_shape.copy()
@@ -176,27 +179,28 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6, max_ram_m
 
     Returns
     -------
-    odf: NumPy memory-map object (shape=(X,Y,Z,3), dtype=float32)
+    odf: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z,C), dtype=float32)
         initialized array of ODF spherical harmonics coefficients
 
-    bg_mrtrix: NumPy memory-map object (shape=(X,Y,Z), dtype=uint8)
+    bg_mrtrix: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
         initialized background for ODF visualization in MRtrix3
 
-    odi_pri: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_pri: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized array of primary orientation dispersion parameters
 
-    odi_sec: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_sec: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized array of secondary orientation dispersion parameters
 
-    odi_tot: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_tot: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized array of total orientation dispersion parameters
 
-    odi_anis: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_anis: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized array of orientation dispersion anisotropy parameters
 
-    vec_tensor_eigen: NumPy memory-map object (shape=(Z,Y,X,3), dtype=uint8)
+    vec_tensor_eigen: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         initialized array of fiber orientation tensor eigenvalues
     """
+
     # ODI maps shape
     odi_shape = tuple(np.ceil(np.divide(vec_img_shape, odf_scale)).astype(int))
 
@@ -260,12 +264,13 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
 
     Returns
     -------
-    vol: NumPy memory map or HDF5 dataset
+    vol: NumPy memory-map object or HDF5 dataset
         initialized data volume
 
     file_path: str
         path to the HDF5 file
     """
+
     # get maximum RAM and initialized array memory size
     max_ram = psutil.virtual_memory()[1] if max_ram_mb is None else max_ram_mb * 1024**2
     item_sz = get_item_size(dtype)
@@ -290,7 +295,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray or NumPy memory-map object (axis order=(Z,Y,X))
         fiber fluorescence volume image
 
     rng_in: NumPy slice object
@@ -302,7 +307,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
     rng_out: NumPy slice object
         output range
 
-    pad_mat: numpy.ndarray (shape=(Z,Y,X))
+    pad_mat: numpy.ndarray (axis order=(Z,Y,X))
         3D image padding range
 
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
@@ -318,25 +323,25 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
     z_sel: NumPy slice object
         selected z-depth range
 
-    fiber_vec_img: NumPy memory map (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory map (shape=(Z,Y,X,3), dtype=uint8)
+    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    frac_anis_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
-    frangi_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         Frangi-enhanced volume image (fiber probability volume)
 
-    iso_fiber_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
-    fiber_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    neuron_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    neuron_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         neuron mask image
 
     ch_neuron: int
@@ -373,6 +378,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad_mat, smooth_sigma, scal
     -------
     None
     """
+
     # slice fiber image slice
     fiber_slice = slice_channel(img, rng_in, channel=ch_fiber, mosaic=mosaic)
 
@@ -443,16 +449,16 @@ def mask_background(img, fiber_vec_slice, orientcol_slice, frac_anis_slice=None,
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         fiber (or neuron) fluorescence volume image
 
-    fiber_vec_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    fiber_vec_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         fiber orientation vector slice
 
-    orientcol_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
+    orientcol_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap slice
 
-    frac_anis_slice: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    frac_anis_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         fractional anisotropy slice
 
     thresh_method: str
@@ -463,18 +469,19 @@ def mask_background(img, fiber_vec_slice, orientcol_slice, frac_anis_slice=None,
 
     Returns
     -------
-    fiber_vec_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    fiber_vec_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         orientation vector patch (masked)
 
-    orientcol_slice: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
+    orientcol_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap patch (masked)
 
-    frac_anis_slice: numpy.ndarray (shape=(Z,Y,X), dtype=float)
+    frac_anis_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         fractional anisotropy patch (masked)
 
-    background_mask: numpy.ndarray (shape=(Z,Y,X), dtype=bool)
+    background_mask: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
         background mask
     """
+
     # generate background mask
     background = create_background_mask(img, thresh_method=thresh_method)
 
@@ -502,10 +509,10 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
 
     Parameters
     ----------
-    fiber_vec_img: NumPy memory-map object (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vectors
 
-    iso_fiber_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber volume
 
     px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
@@ -536,6 +543,7 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
     -------
     None
     """
+
     # get info on the input volume of orientation vectors
     vec_img_shape = np.asarray(fiber_vec_img.shape)
 
@@ -571,7 +579,7 @@ def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir,
 
     Parameters
     ----------
-    img: NumPy memory-map object (shape=(Z,Y,X))
+    img: numpy.ndarray or NumPy memory-map object (axis order=(Z,Y,X))
         microscopy volume image
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)
@@ -644,27 +652,28 @@ def parallel_frangi_on_slices(img, px_size, px_size_iso, smooth_sigma, save_dir,
 
     Returns
     -------
-    fiber_vec_img: NumPy memory map (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory map (shape=(Z,Y,X,3), dtype=uint8)
+    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    frac_anis_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
-    frangi_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         Frangi-enhanced volume image (fiber probability volume)
 
-    iso_fiber_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
-    fiber_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    neuron_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    neuron_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         neuron mask image
     """
+
     # get info on the input volume image
     img_shape, img_shape_um, img_item_size, ch_fiber = \
         get_image_info(img, px_size, ch_fiber, mosaic=mosaic)
@@ -723,13 +732,13 @@ def parallel_odf_on_scales(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, 
 
     Parameters
     ----------
-    fiber_vec_img: NumPy memory-map object (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    iso_fiber_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
-    px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
+    px_size_iso: numpy.ndarray (axis order=(3,), dtype=float)
         adjusted isotropic pixel size [μm]
 
     save_dir: str
@@ -757,6 +766,7 @@ def parallel_odf_on_scales(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, 
     -------
     None
     """
+
     # get ODF analysis start time
     start_time = perf_counter()
 
@@ -793,22 +803,22 @@ def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_
         path to initialized fiber orientation HDF5 dataset
         (not fitting the available RAM)
 
-    fiber_vec_img: NumPy memory map (shape=(Z,Y,X,3), dtype=float32)
+    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory map (shape=(Z,Y,X,3), dtype=uint8)
+    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    frac_anis_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
-    frangi_img: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         Frangi-enhanced volume image (fiber probability)
 
-    fiber_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    neuron_msk: NumPy memory map (shape=(Z,Y,X), dtype=uint8)
+    neuron_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         neuron mask image
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)
@@ -824,6 +834,7 @@ def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_
     -------
     None
     """
+
     # move large fiber orientation dataset to saving directory
     if fiber_dset_path is not None:
         shutil.move(fiber_dset_path, path.join(save_dir, 'fiber_vec_{0}.h5'.format(img_name)))
@@ -857,22 +868,22 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, px_size, save_
 
     Parameters
     ----------
-    odf_img: NumPy memory-map object (shape=(X,Y,Z,3), dtype=float32)
+    odf_img: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z,C), dtype=float32)
         ODF spherical harmonics coefficients
 
-    bg_mrtrix_img: NumPy memory-map object (shape=(X,Y,Z), dtype=uint8)
+    bg_mrtrix_img: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
         background for ODF visualization in MRtrix3
 
-    odi_pri_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_pri_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         primary orientation dispersion parameter
 
-    odi_sec_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_sec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         secondary orientation dispersion parameter
 
-    odi_tot_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_tot_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         total orientation dispersion parameter
 
-    odi_anis_img: NumPy memory-map object (shape=(Z,Y,X), dtype=uint8)
+    odi_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         orientation dispersion anisotropy parameter
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)

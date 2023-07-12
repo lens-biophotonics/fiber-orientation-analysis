@@ -31,6 +31,7 @@ def create_save_dirs(img_path, img_name, skip_frangi=False, skip_odf=False):
     save_subdirs: list (dtype=str)
         saving subdirectory string paths
     """
+
     # get current time
     time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -74,7 +75,7 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False)
     save_dir: string
         saving directory string path
 
-    nd_array: numpy.ndarray
+    nd_array: NumPy memory-map object or HDF5 dataset
         data
 
     px_size: tuple
@@ -84,7 +85,7 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False)
         output format
 
     odi: bool
-        True when saving the ODI maps
+        True when saving ODI maps
 
     Returns
     -------
@@ -122,4 +123,4 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False)
 
     # raise error
     else:
-        raise ValueError("  Unsupported data format!!!")
+        raise ValueError("Unsupported data format!!!")

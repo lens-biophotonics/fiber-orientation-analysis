@@ -80,6 +80,7 @@ def print_frangi_info(alpha, beta, gamma, scales_um, image_shape_um, in_slice_sh
     -------
     None
     """
+
     scales_um = np.asarray(scales_um)
     if gamma is None:
         gamma = 'auto'
@@ -229,6 +230,7 @@ def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, i
     -------
     None
     """
+
     # adjust slice shape
     if np.any(image_shape_um < slice_shape_um):
         slice_shape_um = image_shape_um
@@ -272,7 +274,7 @@ def print_soma_masking(lpf_soma_mask):
         print("Lipofuscin-based soma masking: OFF\n")
 
 
-def print_image_shape(cli_args, image, mosaic, channel_ax=None):
+def print_image_shape(cli_args, img, mosaic, channel_ax=None):
     """
     Print volume image shape.
 
@@ -281,7 +283,7 @@ def print_image_shape(cli_args, image, mosaic, channel_ax=None):
     cli_args: see ArgumentParser.parse_args
         populated namespace of command line arguments
 
-    image: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (shape=(Z,Y,X))
         microscopy volume image
 
     mosaic: bool
@@ -294,22 +296,20 @@ def print_image_shape(cli_args, image, mosaic, channel_ax=None):
     -------
     None
     """
+
     # get pixel size
     px_size_z = cli_args.px_size_z
     px_size_xy = cli_args.px_size_xy
 
     # adapt axis order
-    image_shape = image.shape
-    if len(image_shape) == 4:
-        if mosaic:
-            channel_ax = 1
-        else:
-            channel_ax = -1
+    img_shape = img.shape
+    if len(img_shape) == 4:
+        channel_ax = 1 if mosaic else -1
 
     # get image shape
     if channel_ax is not None:
-        image_shape = np.delete(image_shape, channel_ax)
+        img_shape = np.delete(img_shape, channel_ax)
 
     print("\n                              Z      Y      X")
     print("Image shape          [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(image_shape[0] * px_size_z, image_shape[1] * px_size_xy, image_shape[2] * px_size_xy))
+          .format(img_shape[0] * px_size_z, img_shape[1] * px_size_xy, img_shape[2] * px_size_xy))

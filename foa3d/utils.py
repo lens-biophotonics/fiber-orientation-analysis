@@ -32,6 +32,7 @@ def create_background_mask(img, thresh_method='yen'):
     background_mask: numpy.ndarray (shape=(Z,Y,X), dtype=bool)
         boolean background mask
     """
+
     # select thresholding method
     if thresh_method == 'li':
         initial_li_guess = np.mean(img[img != 0])
@@ -76,6 +77,7 @@ def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
     file_path: str
         path to the HDF5 file
     """
+
     if tmp is None:
         tmp = tempfile.mkdtemp()
 
@@ -115,6 +117,7 @@ def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r
     mmap: NumPy memory map
         memory-mapped array
     """
+
     if tmp is None:
         tmp = tempfile.mkdtemp()
     mmap_path = path.join(tmp, name + '.mmap')
@@ -144,6 +147,7 @@ def get_available_cores():
     num_cpu: int
         number of available cores
     """
+
     num_cpu = environ.pop('OMP_NUM_THREADS', default=None)
     if num_cpu is None:
         num_cpu = cpu_count()
@@ -227,6 +231,7 @@ def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
     divided: numpy.ndarray
         divided array
     """
+
     denominator = np.copy(nd_array2)
     denominator[denominator == 0] = new_value
     divided = np.divide(nd_array1, denominator)
@@ -254,6 +259,7 @@ def elapsed_time(start_time):
     secs: float
         seconds
     """
+
     stop_time = perf_counter()
     total = stop_time - start_time
     mins = total // 60
@@ -296,6 +302,7 @@ def get_item_bytes(data):
     bytes: int
         item size in bytes
     """
+
     # get data type
     data_type = data.dtype
 
@@ -332,6 +339,7 @@ def get_output_prefix(scales_um, alpha, beta, gamma):
     pfx: str
         pipeline configuration prefix
     """
+
     pfx = 'sc'
     for s in scales_um:
         pfx = pfx + str(s) + '_'
@@ -378,7 +386,7 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
 
     # check limits
     if lower >= upper:
-        raise ValueError("  Invalid lower and upper limits: (%s, %s)" % (lower, upper))
+        raise ValueError("Invalid lower and upper limits: (%s, %s)" % (lower, upper))
 
     # view
     norm_angle = angle
@@ -425,6 +433,7 @@ def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     norm_img: numpy.ndarray
         normalized image
     """
+
     # get min and max values
     min_val = np.min(img)
     max_val = np.max(img)
@@ -447,14 +456,15 @@ def orient_colormap(vec_img):
 
     Parameters
     ----------
-    vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_img: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         orientation vectors
 
     Returns
     -------
-    rgb_map: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
+    rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
+
     # get input array shape
     vec_img_shape = vec_img.shape
 
@@ -534,6 +544,7 @@ def transform_axes(nd_array, flipped=None, swapped=None, expand=None):
     nd_array: numpy.ndarray
         transformed data array
     """
+
     if flipped is not None:
         nd_array = np.flip(nd_array, axis=flipped)
 
@@ -553,14 +564,15 @@ def vector_colormap(vec_img):
 
     Parameters
     ----------
-    vec_img: numpy.ndarray (shape=(Z,Y,X,3), dtype=float)
+    vec_img: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         n-dimensional array of orientation vectors
 
     Returns
     -------
-    rgb_map: numpy.ndarray (shape=(Z,Y,X,3), dtype=uint8)
+    rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
+
     # get input array shape
     vec_img_shape = vec_img.shape
 
