@@ -241,13 +241,13 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
 
     Parameters
     ----------
-    shape: tuple (dtype: int)
+    shape: tuple (dtype=int)
         data shape
 
     dtype: str
         data type
 
-    chunks: tuple (dtype: int) or bool
+    chunks: tuple (dtype=int) or bool
         shape of the chunked storage layout (HDF5 only, default: auto chunking)
 
     name: str

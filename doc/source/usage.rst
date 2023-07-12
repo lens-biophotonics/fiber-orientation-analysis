@@ -19,6 +19,10 @@ thus enabling the analysis of high-resolution microscopy reconstructions
 of considerable size even on low-resource machines.
 The .yml and the image stack files must be located within the same directory.
 
+.. code-block:: console
+
+   $ python -m foa3d zetastitch.yml
+
 .. _resolution:
 
 Microscopy image resolution
@@ -42,7 +46,8 @@ Frangi filter configuration
 ---------------------------
 Fiber enhancement is achieved via a multiscale 3D Frangi filter [`Frangi, et al., 1998 <https://doi.org/10.1007/BFb0056195>`_].
 The spatial scales of the filter (in μm) can be provided via the ``-s/--scales`` option.
-As discussed in [Sorelli et al., 2022], the optimal scales which best preserve the original intensity
+As discussed in [`Sorelli, et al., 2023 <https://doi.org/10.1038/s41598-023-30953-w>`_],
+the optimal scales which best preserve the original intensity
 and cross-sectional size of the 3D tubular structures present in the analized images
 correspond to half of their expected radius.
 The Frangi filter is also characterized by three sensitivity parameters, α, β, and γ.
@@ -61,7 +66,7 @@ with an automatic contrast sensitivity:
 
 .. code-block:: console
 
-   $ ... -a 0.001 --b 10 -s 1.25 2.5
+   $ ... -a 0.001 -b 10 -s 1.25 2.5
 
 .. _parallelization:
 
@@ -111,19 +116,20 @@ the Frangi filtering stage via the fast analytical approach described in
 [`Alimi, et al., 2020 <https://doi.org/10.1016/j.media.2020.101760>`_].
 Alimi's method is computationally efficient and is characterized by improved angular precision and resolution
 with respect to deriving the ODFs by modeling local directional histograms of discretized fiber orientations.
-The multiscale estimation of fiber ODFs may be enabled by specifying a list of super-voxel sides (in μm):
+The multiscale estimation of fiber ODFs may be enabled by providing a list of super-voxel sides (in μm) via
+the ``-o/--odf-res`` option:
 
 .. code-block:: console
 
    $ ... --odf-res 25 50
 
 The Foa3D tool also provides the possibility to directly repeat the fiber ODFs estimation,
-skipping the Frangi filtering stage, if a pre-computed fiber orientation vector map is provided as input
+skipping the Frangi filtering stage, if a pre-computed fiber orientation vector map is feeded as input
 in place of the raw microscopy image reconstruction. NumPy and HDF5 files are both supported:
 
 .. code-block:: console
 
-   $ python -m foa3d.py ../fiber_vec.h5 --odf-res 100
+   $ python -m foa3d.py fiber_vec.h5 --odf-res 100
 
 The fiber ODFs returned by the Foa3D tool may be accessed using the open source MRtrix3 software package
 for medical image processing and visualization

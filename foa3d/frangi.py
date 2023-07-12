@@ -202,10 +202,10 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
     enhanced_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
-    eigenvec: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
+    eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         3D orientation map at the input spatial scale
 
-    eigenval: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
     """
 
@@ -318,10 +318,10 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
     enhanced_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
-    fiber_vec: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
+    fiber_vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         3D fiber orientation map
 
-    eigenval: numpy.ndarray (axis order=(Z,Y,X,3), dtype=float)
+    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
     """
 

@@ -82,8 +82,8 @@ def get_cli_parser():
     cli_parser.add_argument('--ch-neuron', type=int, default=0, help='neuronal soma channel')
     cli_parser.add_argument('--z-min', type=float, default=0, help='forced minimum output z-depth [μm]')
     cli_parser.add_argument('--z-max', type=float, default=None, help='forced maximum output z-depth [μm]')
-    cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the fiber ODF super-voxels: '
-                                                                     'do not generate ODFs if None [μm]')
+    cli_parser.add_argument('-o', '--odf-res', nargs='+', type=float, help='side of the fiber ODF super-voxels: '
+                                                                           'do not generate ODFs if None [μm]')
     cli_parser.add_argument('--odf-deg', type=int, default=6,
                             help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
 
@@ -354,7 +354,7 @@ def load_microscopy_image(cli_args):
 
     Returns
     -------
-    img: numpy.ndarray or NumPy memory map
+    img: numpy.ndarray or NumPy memory-map object
         microscopy volume image or array of fiber orientation vectors
 
     mosaic: bool
