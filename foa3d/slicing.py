@@ -201,7 +201,7 @@ def compute_overlap_range(smooth_sigma, frangi_sigma, truncate=4):
     """
     max_sigma = np.max(np.concatenate((smooth_sigma, frangi_sigma)))
 
-    ext_rng = int(np.ceil(2 * truncate * max_sigma) // 2 * 2 + 1) if smooth_sigma is not None else 0
+    ext_rng = int(np.ceil(2 * truncate * max_sigma) // 2) if smooth_sigma is not None else 0
 
     return ext_rng
 
