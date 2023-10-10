@@ -6,7 +6,7 @@ import numpy as np
 import tifffile as tiff
 
 
-def create_save_dirs(img_path, img_name, skip_frangi=False, skip_odf=False):
+def create_save_dirs(img_path, img_name, cli_args, is_fiber=False):
     """
     Create saving directory.
 
@@ -18,13 +18,12 @@ def create_save_dirs(img_path, img_name, skip_frangi=False, skip_odf=False):
     img_name: str
         name of the input volume image
 
-    skip_frangi: bool
+    cli_args: see ArgumentParser.parse_args
+        updated namespace of command line arguments
+
+    is_fiber: bool
         True when fiber orientation vectors are provided as input
         to the pipeline
-
-    skip_odf: bool
-        True when no ODF analysis is required following
-        the Frangi filtering stage
 
     Returns
     -------
@@ -39,31 +38,31 @@ def create_save_dirs(img_path, img_name, skip_frangi=False, skip_odf=False):
     base_path = path.dirname(img_path)
 
     # create saving directory
-    save_dir = path.join(base_path, time_stamp + '_' + img_name)
-    save_subdirs = []
-    if not path.isdir(save_dir):
-        mkdir(save_dir)
+    base_dir = path.join(base_path, time_stamp + '_' + img_name)
+    save_dir = list()
+    if not path.isdir(base_dir):
+        mkdir(base_dir)
 
     # create Frangi filter output subdirectory
-    if not skip_frangi:
-        frangi_dir = path.join(save_dir, 'frangi')
+    if not is_fiber:
+        frangi_dir = path.join(base_dir, 'frangi')
         mkdir(frangi_dir)
-        save_subdirs.append(frangi_dir)
+        save_dir.append(frangi_dir)
     else:
-        save_subdirs.append(None)
+        save_dir.append(None)
 
     # create ODF analysis output subdirectory
-    if not skip_odf:
-        odf_dir = path.join(save_dir, 'odf')
+    if cli_args.odf_res is not None:
+        odf_dir = path.join(base_dir, 'odf')
         mkdir(odf_dir)
-        save_subdirs.append(odf_dir)
+        save_dir.append(odf_dir)
     else:
-        save_subdirs.append(None)
+        save_dir.append(None)
 
-    return save_subdirs
+    return save_dir
 
 
-def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False):
+def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):
     """
     Save array to file.
 
@@ -78,10 +77,10 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False)
     nd_array: NumPy memory-map object or HDF5 dataset
         data
 
-    px_size: tuple
+    px_sz: tuple
         pixel size (Z,Y,X) [um]
 
-    format: str
+    fmt: str
         output format
 
     odi: bool
@@ -93,31 +92,32 @@ def save_array(fname, save_dir, nd_array, px_size=None, format='tif', odi=False)
     """
 
     # check output format
-    format = format.lower()
-    if format == 'tif' or format == 'tiff':
+    fmt = fmt.lower()
+    if fmt == 'tif' or fmt == 'tiff':
 
         # retrieve image pixel size
-        px_size_z, px_size_y, px_size_x = px_size
+        px_sz_z, px_sz_y, px_sz_x = px_sz
 
         # adjust bigtiff optional argument
         bigtiff = True if nd_array.itemsize * np.prod(nd_array.shape) >= 4294967296 else False
 
         # save array to TIFF file
+        out_name = '{}.{}'.format(fname, fmt)
         if odi:
-            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True, bigtiff=bigtiff,
-                         resolution=(1 / px_size_x, 1 / px_size_y),
-                         metadata={'axes': 'ZYX', 'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
+            tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
+                         resolution=(1 / px_sz_x, 1 / px_sz_y),
+                         metadata={'axes': 'ZYX', 'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
         else:
-            tiff.imwrite(path.join(save_dir, fname + '.' + format), nd_array, imagej=True, bigtiff=bigtiff,
-                         resolution=(1 / px_size_x, 1 / px_size_y),
-                         metadata={'spacing': px_size_z, 'unit': 'um'}, compression='zlib')
+            tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
+                         resolution=(1 / px_sz_x, 1 / px_sz_y),
+                         metadata={'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
 
     # save array to NumPy file
-    elif format == 'npy':
+    elif fmt == 'npy':
         np.save(path.join(save_dir, fname + '.npy'), nd_array)
 
     # save array to NIfTI file
-    elif format == 'nii':
+    elif fmt == 'nii':
         nd_array = nib.Nifti1Image(nd_array, np.eye(4))
         nd_array.to_filename(path.join(save_dir, fname + '.nii'))
 

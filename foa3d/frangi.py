@@ -141,9 +141,6 @@ def compute_scaled_hessian(img, sigma=1, trunc=4):
         Hessian matrix of image second derivatives
     """
 
-    # get number of dimensions
-    ndim = img.ndim
-
     # scale selection
     scaled_img = ndi.gaussian_filter(img, sigma=sigma, output=np.float32, truncate=trunc)
 
@@ -152,15 +149,15 @@ def compute_scaled_hessian(img, sigma=1, trunc=4):
 
     # compute the Hessian matrix elements
     hessian_elements = [np.gradient(gradient_list[ax0], axis=ax1)
-                        for ax0, ax1 in combinations_with_replacement(range(ndim), 2)]
+                        for ax0, ax1 in combinations_with_replacement(range(img.ndim), 2)]
 
     # scale the elements of the Hessian matrix
     corr_factor = sigma ** 2
     hessian_elements = [corr_factor * element for element in hessian_elements]
 
     # create the Hessian matrix from its basic elements
-    hessian = np.zeros((ndim, ndim) + scaled_img.shape, dtype=scaled_img.dtype)
-    for index, (ax0, ax1) in enumerate(combinations_with_replacement(range(ndim), 2)):
+    hessian = np.zeros((img.ndim, img.ndim) + scaled_img.shape, dtype=scaled_img.dtype)
+    for index, (ax0, ax1) in enumerate(combinations_with_replacement(range(img.ndim), 2)):
         element = hessian_elements[index]
         hessian[ax0, ax1, ...] = element
         if ax0 != ax1:
@@ -264,30 +261,6 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
     return vesselness
 
 
-def convert_frangi_scales(scales_um, px_size):
-    """
-    Compute the Frangi filter scales in pixel.
-
-    Parameters
-    ----------
-    scales_um: list (dtype=float)
-        Frangi filter scales [μm]
-
-    px_size: int
-        isotropic pixel size [μm]
-
-    Returns
-    -------
-    scales_px: numpy.ndarray (dtype=int)
-        Frangi filter scales [px]
-    """
-
-    scales_um = np.asarray(scales_um)
-    scales_px = scales_um / px_size
-
-    return scales_px
-
-
 def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True):
     """
     Apply 3D Frangi filter to microscopy volume image.
@@ -329,7 +302,7 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
     n_scales = len(scales_px)
     if n_scales == 1:
         enhanced_img, fiber_vec, eigenval \
-            = compute_scaled_orientation(scales_px[0], img, alpha=alpha, beta=beta, gamma=gamma,  dark=dark)
+            = compute_scaled_orientation(scales_px[0], img, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
     # parallel scaled vesselness analysis
     else:
@@ -381,17 +354,13 @@ def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
 
     Returns
     -------
-    vesselness: numpy.ndarray (axis order=(Z,Y,X))
+    vesselness: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         masked Frangi's vesselness likelihood image
     """
 
-    if dark:
-        vesselness[eigen2 < 0] = 0
-        vesselness[eigen3 < 0] = 0
-    else:
-        vesselness[eigen2 > 0] = 0
-        vesselness[eigen3 > 0] = 0
-    vesselness[np.isnan(vesselness)] = 0
+    bg_msk = np.logical_or(eigen2 < 0, eigen3 < 0) if dark else np.logical_or(eigen2 > 0, eigen3 > 0)
+    bg_msk = np.logical_or(bg_msk, np.isnan(vesselness))
+    vesselness[bg_msk] = 0
 
     return vesselness
 

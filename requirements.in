@@ -7,3 +7,4 @@ nibabel
 numba
 psutil
 scikit-image
+zetastitcher==0.7.0.post1

@@ -15,43 +15,43 @@ from skimage.filters import (threshold_li, threshold_niblack,
                              threshold_yen)
 
 
-def create_background_mask(img, thresh_method='yen'):
+def create_background_mask(img, method='yen'):
     """
     Compute background mask.
 
     Parameters
     ----------
-    img: numpy.ndarray (shape=(Z,Y,X))
+    img: numpy.ndarray (axis order=(Z,Y,X))
         microscopy volume image
 
-    thresh_method: str
+    method: str
         image thresholding method
 
     Returns
     -------
-    background_mask: numpy.ndarray (shape=(Z,Y,X), dtype=bool)
+    bg_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
         boolean background mask
     """
 
     # select thresholding method
-    if thresh_method == 'li':
+    if method == 'li':
         initial_li_guess = np.mean(img[img != 0])
         thresh = threshold_li(img, initial_guess=initial_li_guess)
-    elif thresh_method == 'niblack':
+    elif method == 'niblack':
         thresh = threshold_niblack(img, window_size=15, k=0.2)
-    elif thresh_method == 'sauvola':
+    elif method == 'sauvola':
         thresh = threshold_sauvola(img, window_size=15, k=0.2, r=None)
-    elif thresh_method == 'triangle':
+    elif method == 'triangle':
         thresh = threshold_triangle(img, nbins=256)
-    elif thresh_method == 'yen':
+    elif method == 'yen':
         thresh = threshold_yen(img, nbins=256)
     else:
-        raise ValueError("  Unsupported thresholding method!!!")
+        raise ValueError("Unsupported thresholding method!!!")
 
     # compute mask
-    background_mask = img < thresh
+    bg_msk = img < thresh
 
-    return background_mask
+    return bg_msk
 
 
 def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
@@ -69,6 +69,12 @@ def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
     chunks: tuple (dtype: int) or bool
         shape of the chunked storage layout (default: auto chunking)
 
+    name: str
+        filename
+
+    tmp: str
+        path to existing temporary saving directory
+
     Returns
     -------
     dset:
@@ -77,18 +83,17 @@ def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
     file_path: str
         path to the HDF5 file
     """
-
     if tmp is None:
         tmp = tempfile.mkdtemp()
 
-    file_path = path.join(tmp, name + '.h5')
+    file_path = path.join(tmp, '{}.h5'.format(name))
     file = File(file_path, 'w')
-    dset = file.create_dataset(None, dset_shape, chunks=chunks, dtype=dtype)
+    dset = file.create_dataset(None, dset_shape, chunks=tuple(chunks), dtype=dtype)
 
     return dset, file_path
 
 
-def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r+'):
+def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mode='r+'):
     """
     Create a memory-map to an array stored in a binary file on disk.
 
@@ -103,7 +108,7 @@ def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r
     name: str
         optional temporary filename
 
-    tmp: str
+    tmp_dir: str
         temporary file directory
 
     arr: numpy.ndarray
@@ -118,14 +123,16 @@ def create_memory_map(shape, dtype, name='tmp', tmp=None, arr=None, mmap_mode='r
         memory-mapped array
     """
 
-    if tmp is None:
-        tmp = tempfile.mkdtemp()
-    mmap_path = path.join(tmp, name + '.mmap')
+    if tmp_dir is None:
+        tmp_dir = tempfile.mkdtemp()
+    mmap_path = path.join(tmp_dir, name + '.mmap')
 
     if path.exists(mmap_path):
         unlink(mmap_path)
+
     if arr is None:
         arr = np.zeros(tuple(shape), dtype=dtype)
+
     _ = dump(arr, mmap_path)
     mmap = load(mmap_path, mmap_mode=mmap_mode)
     del arr
@@ -138,10 +145,6 @@ def get_available_cores():
     """
     Return the number of available logical cores.
 
-    Parameters
-    ----------
-    None
-
     Returns
     -------
     num_cpu: int
@@ -149,10 +152,7 @@ def get_available_cores():
     """
 
     num_cpu = environ.pop('OMP_NUM_THREADS', default=None)
-    if num_cpu is None:
-        num_cpu = cpu_count()
-    else:
-        num_cpu = int(num_cpu)
+    num_cpu = cpu_count() if num_cpu is None else int(num_cpu)
 
     return num_cpu
 
@@ -299,20 +299,17 @@ def get_item_bytes(data):
 
     Returns
     -------
-    bytes: int
+    bts: int
         item size in bytes
     """
 
-    # get data type
-    data_type = data.dtype
-
     # type byte size
     try:
-        bytes = int(np.iinfo(data_type).bits / 8)
+        bts = int(np.iinfo(data.dtype).bits / 8)
     except ValueError:
-        bytes = int(np.finfo(data_type).bits / 8)
+        bts = int(np.finfo(data.dtype).bits / 8)
 
-    return bytes
+    return bts
 
 
 def get_output_prefix(scales_um, alpha, beta, gamma):
@@ -342,8 +339,9 @@ def get_output_prefix(scales_um, alpha, beta, gamma):
 
     pfx = 'sc'
     for s in scales_um:
-        pfx = pfx + str(s) + '_'
-    pfx = 'a' + str(alpha) + '_b' + str(beta) + '_g' + str(gamma) + '_' + pfx
+        pfx += '{}_'.format(s)
+
+    pfx = 'a{}_b{}_g{}_{}'.format(alpha, beta, gamma, pfx)
 
     return pfx
 
@@ -377,12 +375,12 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
       if lower >= upper
     """
     # convert to array if needed
-    isList = False
+    is_list = False
     if np.isscalar(angle):
         angle = np.array(angle)
     elif isinstance(angle, list):
         angle = np.array(angle)
-        isList = True
+        is_list = True
 
     # check limits
     if lower >= upper:
@@ -407,7 +405,7 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
         norm_angle = norm_angle.astype(dtype)
 
     # convert back to list
-    if isList:
+    if is_list:
         norm_angle = list(norm_angle)
 
     return norm_angle
@@ -438,7 +436,7 @@ def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     min_val = np.min(img)
     max_val = np.max(img)
 
-    # normalization
+    # normalize
     if max_val != 0:
         if max_val != min_val:
             norm_img = (((img - min_val) / (max_val - min_val)) * max_out_val).astype(dtype)
@@ -450,7 +448,7 @@ def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     return norm_img
 
 
-def orient_colormap(vec_img):
+def hsv_orient_cmap(vec_img):
     """
     Compute HSV colormap of vector orientations from 3D vector field.
 
@@ -465,12 +463,8 @@ def orient_colormap(vec_img):
         orientation color map
     """
 
-    # get input array shape
-    vec_img_shape = vec_img.shape
-
-    # select planar components
-    vy = vec_img[..., 1]
-    vx = vec_img[..., 2]
+    # extract planar components
+    vy, vx = (vec_img[..., 1], vec_img[..., 2])
 
     # compute the in-plane versor length
     vxy_abs = np.sqrt(np.square(vx) + np.square(vy))
@@ -481,16 +475,13 @@ def orient_colormap(vec_img):
     vxy_ang = np.divide(vxy_ang, np.pi)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=tuple(list(vec_img_shape[:-1]) + [3]), dtype=np.uint8)
-    for z in range(vec_img_shape[0]):
+    rgb_map = np.zeros(shape=tuple(list(vec_img.shape[:-1]) + [3]), dtype=np.uint8)
+    for z in range(vec_img.shape[0]):
 
-        # generate colormap slice by slice
-        h = vxy_ang[z]
-        s = vxy_abs[z]
-        v = s
-        hsv_map = np.stack((h, s, v), axis=-1)
+        # generate HSV colormap slice by slice
+        hsv_map = np.stack((vxy_ang[z], vxy_abs[z], vxy_abs[z]), axis=-1)
 
-        # conversion to 8-bit precision
+        # convert to RGB map with 8-bit precision
         rgb_map[z] = (255.0 * hsv_to_rgb(hsv_map)).astype(np.uint8)
 
     return rgb_map
@@ -558,7 +549,7 @@ def transform_axes(nd_array, flipped=None, swapped=None, expand=None):
     return nd_array
 
 
-def vector_colormap(vec_img):
+def rgb_orient_cmap(vec_img, minimum=0, stretch=1, q=8):
     """
     Compute RGB colormap of orientation vector components from 3D vector field.
 
@@ -567,26 +558,30 @@ def vector_colormap(vec_img):
     vec_img: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         n-dimensional array of orientation vectors
 
+    minimum: int
+        intensity that should be mapped to black (a scalar or array for R, G, B)
+
+    stretch: int
+        linear stretch of the image
+
+    q: int
+        asinh softening parameter
+
     Returns
     -------
     rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
 
-    # get input array shape
-    vec_img_shape = vec_img.shape
-
     # take absolute value
     vec_img = np.abs(vec_img)
 
     # initialize colormap
-    rgb_map = np.zeros(shape=vec_img_shape, dtype=np.uint8)
-    for z in range(vec_img_shape[0]):
+    rgb_map = np.zeros(shape=vec_img.shape, dtype=np.uint8)
+    for z in range(vec_img.shape[0]):
 
         # generate colormap slice by slice
-        img_r = vec_img[z, :, :, 2]
-        img_g = vec_img[z, :, :, 1]
-        img_b = vec_img[z, :, :, 0]
-        rgb_map[z] = make_lupton_rgb(img_r, img_g, img_b, minimum=0, stretch=1, Q=8)
+        img_r, img_g, img_b = (vec_img[z, :, :, 2], vec_img[z, :, :, 1], vec_img[z, :, :, 0])
+        rgb_map[z] = make_lupton_rgb(img_r, img_g, img_b, minimum=minimum, stretch=stretch, Q=q)
 
     return rgb_map

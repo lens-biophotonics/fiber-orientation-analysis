@@ -38,6 +38,95 @@ def compute_fiber_angles(fiber_vec, norm):
     return phi, theta
 
 
+def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_tensor_eigen, vxl_side, odf_norm,
+                    odf_deg=6, vxl_thr=0.5, vec_thr=-1):
+    """
+    Compute the spherical harmonics coefficients iterating over super-voxels
+    of fiber orientation vectors.
+
+    Parameters
+    ----------
+    fiber_vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float)
+        fiber orientation vectors
+
+    odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
+        initialized array of ODF spherical harmonics coefficients
+
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        primary orientation dispersion index
+
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        secondary orientation dispersion index
+
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        total orientation dispersion index
+
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        orientation dispersion index anisotropy
+
+    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
+        initialized array of orientation tensor eigenvalues
+
+    vxl_side: int
+        side of the ODF super-voxel [px]
+
+    odf_norm: numpy.ndarray (dtype: float)
+        2D array of spherical harmonics normalization factors
+
+    odf_deg: int
+        degrees of the spherical harmonics series expansion
+
+    vxl_thr: float
+        minimum relative threshold on the sliced voxel volume
+
+    vec_thr: float
+        minimum relative threshold on non-zero orientation vectors
+
+    Returns
+    -------
+    odf: numpy.ndarray (axis order=(X,Y,Z,C), dtype=float32)
+        volumetric map of real-valued spherical harmonics coefficients
+    """
+
+    # iterate over ODF super-voxels
+    ref_vxl_size = min(vxl_side, fiber_vec.shape[0]) * vxl_side**2
+    for z in range(0, fiber_vec.shape[0], vxl_side):
+        zmax = z + vxl_side
+
+        for y in range(0, fiber_vec.shape[1], vxl_side):
+            ymax = y + vxl_side
+
+            for x in range(0, fiber_vec.shape[2], vxl_side):
+                xmax = x + vxl_side
+
+                # slice orientation voxel
+                vec_vxl = fiber_vec[z:zmax, y:ymax, x:xmax, :]
+                zerovec = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
+                sli_vxl_size = np.prod(vec_vxl.shape[:-1])
+
+                # skip boundary voxels and voxels without enough non-zero orientation vectors
+                if sli_vxl_size / ref_vxl_size > vxl_thr and 1 - zerovec / sli_vxl_size > vec_thr:
+
+                    # flatten orientation supervoxel
+                    vec_arr = vec_vxl.ravel()
+
+                    # compute ODF and orientation tensor eigenvalues
+                    zv, yv, xv = z // vxl_side, y // vxl_side, x // vxl_side
+                    odf[zv, yv, xv, :] = fiber_vectors_to_sph_harm(vec_arr, odf_deg, odf_norm)
+                    vec_tensor_eigen[zv, yv, xv, :] = compute_vec_tensor_eigen(vec_arr)
+
+    # compute slice-wise dispersion and anisotropy parameters
+    compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, odi_anis)
+
+    # keep a black background
+    mask_orientation_dispersion([odi_pri, odi_sec, odi_tot, odi_anis], vec_tensor_eigen)
+
+    # transform axes
+    odf = transform_axes(odf, swapped=(0, 2), flipped=(1, 2))
+
+    return odf
+
+
 @njit(cache=True)
 def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, odi_anis):
     """
@@ -45,22 +134,34 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
 
     Parameters
     ----------
-    vec_tensor_eigen: numpy.ndarray (axis orde=(Z,Y,X,C), dtype=float32)
+    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         orientation tensor eigenvalues
         computed from an ODF super-voxel
 
-    Returns
-    -------
-    odi_pri: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         primary orientation dispersion index
 
-    odi_sec: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         secondary orientation dispersion index
 
-    odi_tot: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         total orientation dispersion index
 
-    odi_anis: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        orientation dispersion index anisotropy
+
+    Returns
+    -------
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        primary orientation dispersion index
+
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        secondary orientation dispersion index
+
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        total orientation dispersion index
+
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         orientation dispersion index anisotropy
     """
 
@@ -70,50 +171,20 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
     diff = np.abs(vec_tensor_eigen[..., 1] - vec_tensor_eigen[..., 0])
 
     # primary dispersion (1.2732395447351628 = 4/π)
-    odi_pri = 2 - 1.2732395447351628 * np.arctan2(k1, k2)
+    odi_pri[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, k2))) \
+        .astype(np.uint8)
 
     # secondary dispersion
-    odi_sec = 2 - 1.2732395447351628 * np.arctan2(k1, k3)
+    odi_sec[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, k3))) \
+        .astype(np.uint8)
 
     # total dispersion
-    odi_tot = 2 - 1.2732395447351628 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3))))
+    odi_tot[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3)))))) \
+        .astype(np.uint8)
 
     # dispersion anisotropy
-    odi_anis = 2 - 1.2732395447351628 * np.arctan2(k1, diff)
-
-    return odi_pri, odi_sec, odi_tot, odi_anis
-
-
-def mask_orientation_dispersion(odi_tpl, vec_tensor_eigen):
-    """
-    Keep a black background where no fiber orientation vector
-    is available.
-
-    Parameters
-    ----------
-    odi_tpl: tuple
-        tuple including the ODI maps estimated
-        in compute_orientation_dispersion()
-
-    vec_tensor_eigen: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float32)
-        orientation tensor eigenvalues
-        computed from an ODF super-voxel
-
-    Returns
-    -------
-    odi_tpl: tuple
-        updated tuple including the masked ODI maps
-    """
-
-    bg_msk = np.all(vec_tensor_eigen == 0, axis=-1)
-
-    odi_lst = list(odi_tpl)
-    for odi in odi_lst:
-        odi[bg_msk] = 0
-
-    odi_tpl = tuple(odi_lst)
-
-    return odi_tpl
+    odi_anis[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, diff))) \
+        .astype(np.uint8)
 
 
 @njit(cache=True)
@@ -194,114 +265,6 @@ def compute_vec_tensor_eigen(fiber_vec):
     return vec_tensor_eigen
 
 
-def estimate_odf_coeff(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_tensor_eigen, vxl_side, odf_norm,
-                       odf_degrees=6, vxl_thr=0.5, vec_thr=-1):
-    """
-    Estimate the spherical harmonics coefficients iterating over super-voxels
-    of fiber orientation vectors.
-
-    Parameters
-    ----------
-    fiber_vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
-        fiber orientation vectors
-
-    odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
-        initialized array of ODF spherical harmonics coefficients
-
-    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        initialized array of primary orientation dispersion parameters
-
-    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        initialized array of secondary orientation dispersion parameters
-
-    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        initialized array of total orientation dispersion parameters
-
-    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        initialized array of orientation dispersion anisotropy parameters
-
-    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=uint8)
-        initialized array of orientation tensor eigenvalues
-
-    vxl_side: int
-        side of the ODF super-voxel [px]
-
-    odf_norm: numpy.ndarray (dtype: float)
-        2D array of spherical harmonics normalization factors
-
-    odf_degrees: int
-        degrees of the spherical harmonics series expansion
-
-    vxl_thr: float
-        minimum relative threshold on the sliced voxel volume
-
-    vec_thr: float
-        minimum relative threshold on non-zero orientation vectors
-
-    Returns
-    -------
-    odf: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float32)
-        volumetric map of real-valued spherical harmonics coefficients
-
-    odi_pri: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        primary orientation dispersion index
-
-    odi_sec: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        secondary orientation dispersion index
-
-    odi_tot: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        total orientation dispersion index
-
-    odi_anis: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        orientation dispersion index anisotropy
-    """
-
-    # compute spherical harmonics normalization factors (once)
-    odf_norm = get_sph_harm_norm_factors(odf_degrees)
-
-    # iterate over ODF super-voxels
-    fiber_vec_shape = np.array(fiber_vec.shape)
-    ref_vxl_size = min(vxl_side, fiber_vec_shape[0]) * vxl_side**2
-    for z in range(0, fiber_vec_shape[0], vxl_side):
-        zmax = z + vxl_side
-
-        for y in range(0, fiber_vec_shape[1], vxl_side):
-            ymax = y + vxl_side
-
-            for x in range(0, fiber_vec_shape[2], vxl_side):
-                xmax = x + vxl_side
-
-                # slice vector voxel (skip boundary voxels and voxels without enough non-zero orientation vectors)
-                vec_vxl = fiber_vec[z:zmax, y:ymax, x:xmax, :]
-                zero_vecs = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
-                sli_vxl_size = np.prod(vec_vxl.shape[:-1])
-                if sli_vxl_size / ref_vxl_size > vxl_thr and 1 - zero_vecs / sli_vxl_size > vec_thr:
-                    vec_arr = vec_vxl.ravel()
-                    odf[z // vxl_side, y // vxl_side, x // vxl_side, :] \
-                        = fiber_vectors_to_sph_harm(vec_arr, odf_degrees, odf_norm)
-                    vec_tensor_eigen[z // vxl_side, y // vxl_side, x // vxl_side, :] \
-                        = compute_vec_tensor_eigen(vec_arr)
-
-    # compute dispersion and anisotropy parameters slice-wise
-    odi_pri, odi_sec, odi_tot, odi_anis \
-        = compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, odi_anis)
-
-    # keep a black background
-    odi_pri, odi_sec, odi_tot, odi_anis \
-        = mask_orientation_dispersion((odi_pri, odi_sec, odi_tot, odi_anis), vec_tensor_eigen)
-
-    # transform axes
-    odf = transform_axes(odf, swapped=(0, 2), flipped=(1, 2))
-
-    # adjust data type
-    odi_pri = (255.0 * odi_pri).astype(np.uint8)
-    odi_sec = (255.0 * odi_sec).astype(np.uint8)
-    odi_tot = (255.0 * odi_tot).astype(np.uint8)
-    odi_anis = (255.0 * odi_anis).astype(np.uint8)
-
-    return odf, odi_pri, odi_sec, odi_tot, odi_anis
-
-
 factorial_lut = np.array([
     1, 1, 2, 6, 24, 120, 720, 5040, 40320,
     362880, 3628800, 39916800, 479001600,
@@ -366,8 +329,8 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
 
     real_sph_harm = np.zeros(ncoeff)
     i = 0
-    for n in np.arange(0, degrees + 1, 2):
-        for m in np.arange(-n, n + 1, 1):
+    for n in range(0, degrees + 1, 2):
+        for m in range(-n, n + 1, 1):
             for j, (p, t) in enumerate(zip(phi, theta)):
                 real_sph_harm[i] += compute_real_sph_harm(n, m, p, np.sin(t), np.cos(t), norm_factors)
             i += 1
@@ -442,22 +405,20 @@ def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
     new_shape = bg_mrtrix_mmap.shape[:-1]
 
     # normalize
-    dims = bg_img.ndim
-    if dims == 3:
+    if bg_img.ndim == 3:
         bg_img = normalize_image(bg_img)
 
     # loop over z-slices, and resize them
     for z in range(0, bg_img.shape[0], vxl_side):
-        if dims == 3:
+        if bg_img.ndim == 3:
             tmp_slice = np.mean(bg_img[z:z + vxl_side, ...], axis=0)
-        elif dims == 4:
+        elif bg_img.ndim == 4:
             tmp_slice = 255.0 * np.sum(np.abs(bg_img[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
             tmp_slice = np.swapaxes(tmp_slice, 0, 1).astype(np.uint8)
-        bg_mrtrix_mmap[..., z // vxl_side] = resize(tmp_slice, output_shape=new_shape,
-                                                    anti_aliasing=True, preserve_range=True)
 
-    return bg_mrtrix_mmap
+        bg_mrtrix_mmap[..., z // vxl_side] = \
+            resize(tmp_slice, output_shape=new_shape, anti_aliasing=True, preserve_range=True)
 
 
 @njit(cache=True)
@@ -499,13 +460,39 @@ def get_sph_harm_norm_factors(degrees):
     """
 
     norm_factors = np.zeros(shape=(degrees + 1, 2 * degrees + 1))
-    for n in np.arange(0, degrees + 1, 2):
-        for m in np.arange(0, n + 1, 1):
+    for n in range(0, degrees + 1, 2):
+        for m in range(0, n + 1, 1):
             norm_factors[n, m] = norm_factor(n, m)
 
     norm_factors = norm_factors[::2]
 
     return norm_factors
+
+
+def mask_orientation_dispersion(odi_lst, vec_tensor_eigen):
+    """
+    Keep a black background where no fiber orientation vector
+    is available.
+
+    Parameters
+    ----------
+    odi_lst: list
+        list including the ODI maps estimated
+        in compute_orientation_dispersion()
+
+    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
+        orientation tensor eigenvalues
+        computed from an ODF super-voxel
+
+    Returns
+    -------
+    None
+    """
+
+    bg_msk = np.all(vec_tensor_eigen == 0, axis=-1)
+
+    for odi in odi_lst:
+        odi[bg_msk] = 0
 
 
 @njit(cache=True)
@@ -538,177 +525,177 @@ def norm_factor(n, m):
 
 
 @njit(cache=True)
-def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm_factor):
+def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm):
     if order == -2:
-        return norm_factor[2] * 3 * sin_theta**2 * np.sin(2 * phi)
+        return norm[2] * 3 * sin_theta**2 * np.sin(2 * phi)
     elif order == -1:
-        return norm_factor[1] * 3 * sin_theta * cos_theta * np.sin(phi)
+        return norm[1] * 3 * sin_theta * cos_theta * np.sin(phi)
     elif order == 0:
-        return norm_factor[0] * 0.5 * (3 * cos_theta**2 - 1)
+        return norm[0] * 0.5 * (3 * cos_theta ** 2 - 1)
     elif order == 1:
-        return norm_factor[1] * 3 * sin_theta * cos_theta * np.cos(phi)
+        return norm[1] * 3 * sin_theta * cos_theta * np.cos(phi)
     elif order == 2:
-        return norm_factor[2] * 3 * sin_theta**2 * np.cos(2 * phi)
+        return norm[2] * 3 * sin_theta**2 * np.cos(2 * phi)
 
 
 @njit(cache=True)
-def sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm_factor):
+def sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm):
     if order == -4:
-        return norm_factor[4] * 105 * sin_theta**4 * np.sin(4 * phi)
+        return norm[4] * 105 * sin_theta**4 * np.sin(4 * phi)
     elif order == -3:
-        return norm_factor[3] * 105 * sin_theta**3 * cos_theta * np.sin(3 * phi)
+        return norm[3] * 105 * sin_theta**3 * cos_theta * np.sin(3 * phi)
     elif order == -2:
-        return norm_factor[2] * 7.5 * sin_theta**2 * (7 * cos_theta**2 - 1) * np.sin(2 * phi)
+        return norm[2] * 7.5 * sin_theta**2 * (7 * cos_theta ** 2 - 1) * np.sin(2 * phi)
     elif order == -1:
-        return norm_factor[1] * 2.5 * sin_theta * (7 * cos_theta**3 - 3 * cos_theta) * np.sin(phi)
+        return norm[1] * 2.5 * sin_theta * (7 * cos_theta ** 3 - 3 * cos_theta) * np.sin(phi)
     elif order == 0:
-        return norm_factor[0] * 0.125 * (35 * cos_theta**4 - 30 * cos_theta**2 + 3)
+        return norm[0] * 0.125 * (35 * cos_theta ** 4 - 30 * cos_theta ** 2 + 3)
     elif order == 1:
-        return norm_factor[1] * 2.5 * sin_theta * (7 * cos_theta**3 - 3 * cos_theta) * np.cos(phi)
+        return norm[1] * 2.5 * sin_theta * (7 * cos_theta ** 3 - 3 * cos_theta) * np.cos(phi)
     elif order == 2:
-        return norm_factor[2] * 7.5 * sin_theta**2 * (7 * cos_theta**2 - 1) * np.cos(2 * phi)
+        return norm[2] * 7.5 * sin_theta**2 * (7 * cos_theta ** 2 - 1) * np.cos(2 * phi)
     elif order == 3:
-        return norm_factor[3] * 105 * sin_theta**3 * cos_theta * np.cos(3 * phi)
+        return norm[3] * 105 * sin_theta**3 * cos_theta * np.cos(3 * phi)
     elif order == 4:
-        return norm_factor[4] * 105 * sin_theta**4 * np.cos(4 * phi)
+        return norm[4] * 105 * sin_theta**4 * np.cos(4 * phi)
 
 
 @njit(cache=True)
-def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factor):
+def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm):
     if order == -6:
-        return norm_factor[6] * 10395 * sin_theta**6 * np.sin(6 * phi)
+        return norm[6] * 10395 * sin_theta**6 * np.sin(6 * phi)
     elif order == -5:
-        return norm_factor[5] * 10395 * sin_theta**5 * cos_theta * np.sin(5 * phi)
+        return norm[5] * 10395 * sin_theta**5 * cos_theta * np.sin(5 * phi)
     elif order == -4:
-        return norm_factor[4] * 472.5 * sin_theta**4 * (11 * cos_theta**2 - 1) * np.sin(4 * phi)
+        return norm[4] * 472.5 * sin_theta**4 * (11 * cos_theta ** 2 - 1) * np.sin(4 * phi)
     elif order == -3:
-        return norm_factor[3] * 157.5 * sin_theta**3 * (11 * cos_theta**3 - 3 * cos_theta) * np.sin(3 * phi)
+        return norm[3] * 157.5 * sin_theta**3 * (11 * cos_theta ** 3 - 3 * cos_theta) * np.sin(3 * phi)
     elif order == -2:
-        return norm_factor[2] * 13.125 * sin_theta**2 * (33 * cos_theta**4 - 18 * cos_theta**2 + 1) * np.sin(2 * phi)
+        return norm[2] * 13.125 * sin_theta**2 * (33 * cos_theta ** 4 - 18 * cos_theta ** 2 + 1) * np.sin(2 * phi)
     elif order == -1:
-        return norm_factor[1] * 2.625 * sin_theta \
+        return norm[1] * 2.625 * sin_theta \
             * (33 * cos_theta**5 - 30 * cos_theta**3 + 5 * cos_theta) * np.sin(phi)
     elif order == 0:
-        return norm_factor[0] * 0.0625 * (231 * cos_theta**6 - 315 * cos_theta**4 + 105 * cos_theta**2 - 5)
+        return norm[0] * 0.0625 * (231 * cos_theta ** 6 - 315 * cos_theta ** 4 + 105 * cos_theta ** 2 - 5)
     elif order == 1:
-        return norm_factor[1] * 2.625 * sin_theta \
+        return norm[1] * 2.625 * sin_theta \
             * (33 * cos_theta**5 - 30 * cos_theta**3 + 5 * cos_theta) * np.cos(phi)
     elif order == 2:
-        return norm_factor[2] * 13.125 * sin_theta**2 * (33 * cos_theta**4 - 18 * cos_theta**2 + 1) * np.cos(2 * phi)
+        return norm[2] * 13.125 * sin_theta**2 * (33 * cos_theta ** 4 - 18 * cos_theta ** 2 + 1) * np.cos(2 * phi)
     elif order == 3:
-        return norm_factor[3] * 157.5 * sin_theta**3 * (11 * cos_theta**3 - 3 * cos_theta) * np.cos(3 * phi)
+        return norm[3] * 157.5 * sin_theta**3 * (11 * cos_theta ** 3 - 3 * cos_theta) * np.cos(3 * phi)
     elif order == 4:
-        return norm_factor[4] * 472.5 * sin_theta**4 * (11 * cos_theta**2 - 1) * np.cos(4 * phi)
+        return norm[4] * 472.5 * sin_theta**4 * (11 * cos_theta ** 2 - 1) * np.cos(4 * phi)
     elif order == 5:
-        return norm_factor[5] * 10395 * sin_theta**5 * cos_theta * np.cos(5 * phi)
+        return norm[5] * 10395 * sin_theta**5 * cos_theta * np.cos(5 * phi)
     elif order == 6:
-        return norm_factor[6] * 10395 * sin_theta**6 * np.cos(6 * phi)
+        return norm[6] * 10395 * sin_theta**6 * np.cos(6 * phi)
 
 
 @njit(cache=True)
-def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factor):
+def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm):
     if order == -8:
-        return norm_factor[8] * 2027025 * sin_theta**8 * np.sin(8 * phi)
+        return norm[8] * 2027025 * sin_theta**8 * np.sin(8 * phi)
     elif order == -7:
-        return norm_factor[7] * 2027025 * sin_theta**7 * cos_theta * np.sin(7 * phi)
+        return norm[7] * 2027025 * sin_theta**7 * cos_theta * np.sin(7 * phi)
     elif order == -6:
-        return norm_factor[6] * 67567.5 * sin_theta**6 * (15 * cos_theta**2 - 1) * np.sin(6 * phi)
+        return norm[6] * 67567.5 * sin_theta**6 * (15 * cos_theta ** 2 - 1) * np.sin(6 * phi)
     elif order == -5:
-        return norm_factor[5] * 67567.5 * sin_theta**5 * (5 * cos_theta**3 - cos_theta) * np.sin(5 * phi)
+        return norm[5] * 67567.5 * sin_theta**5 * (5 * cos_theta ** 3 - cos_theta) * np.sin(5 * phi)
     elif order == -4:
-        return norm_factor[4] * 1299.375 * sin_theta**4 * (65 * cos_theta**4 - 26 * cos_theta**2 + 1) * np.sin(4 * phi)
+        return norm[4] * 1299.375 * sin_theta**4 * (65 * cos_theta ** 4 - 26 * cos_theta ** 2 + 1) * np.sin(4 * phi)
     elif order == -3:
-        return norm_factor[3] * 433.125 * sin_theta**3 \
+        return norm[3] * 433.125 * sin_theta**3 \
             * (39 * cos_theta**5 - 26 * cos_theta**3 + 3 * cos_theta) * np.sin(3 * phi)
     elif order == -2:
-        return norm_factor[2] * 19.6875 * sin_theta**2 \
+        return norm[2] * 19.6875 * sin_theta**2 \
             * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.sin(2 * phi)
     elif order == -1:
-        return norm_factor[1] * 0.5625 * sin_theta \
+        return norm[1] * 0.5625 * sin_theta \
             * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.sin(phi)
     elif order == 0:
-        return norm_factor[0] * 0.0078125 \
+        return norm[0] * 0.0078125 \
             * (6435 * cos_theta**8 - 12012 * cos_theta**6 + 6930 * cos_theta**4 - 1260 * cos_theta**2 + 35)
     elif order == 1:
-        return norm_factor[1] * 0.5625 * sin_theta \
+        return norm[1] * 0.5625 * sin_theta \
             * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.cos(phi)
     elif order == 2:
-        return norm_factor[2] * 19.6875 * sin_theta**2 \
+        return norm[2] * 19.6875 * sin_theta**2 \
             * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.cos(2 * phi)
     elif order == 3:
-        return norm_factor[3] * 433.125 * sin_theta**3 \
+        return norm[3] * 433.125 * sin_theta**3 \
             * (39 * cos_theta**5 - 26 * cos_theta**3 + 3 * cos_theta) * np.cos(3 * phi)
     elif order == 4:
-        return norm_factor[4] * 1299.375 * sin_theta**4 * (65 * cos_theta**4 - 26 * cos_theta**2 + 1) * np.cos(4 * phi)
+        return norm[4] * 1299.375 * sin_theta**4 * (65 * cos_theta ** 4 - 26 * cos_theta ** 2 + 1) * np.cos(4 * phi)
     elif order == 5:
-        return norm_factor[5] * 67567.5 * sin_theta**5 * (5 * cos_theta**3 - cos_theta) * np.cos(5 * phi)
+        return norm[5] * 67567.5 * sin_theta**5 * (5 * cos_theta ** 3 - cos_theta) * np.cos(5 * phi)
     elif order == 6:
-        return norm_factor[6] * 67567.5 * sin_theta**6 * (15 * cos_theta**2 - 1) * np.cos(6 * phi)
+        return norm[6] * 67567.5 * sin_theta**6 * (15 * cos_theta ** 2 - 1) * np.cos(6 * phi)
     elif order == 7:
-        return norm_factor[7] * 2027025 * sin_theta**7 * cos_theta * np.cos(7 * phi)
+        return norm[7] * 2027025 * sin_theta**7 * cos_theta * np.cos(7 * phi)
     elif order == 8:
-        return norm_factor[8] * 2027025 * sin_theta**8 * np.cos(8 * phi)
+        return norm[8] * 2027025 * sin_theta**8 * np.cos(8 * phi)
 
 
 @njit(cache=True)
-def sph_harm_degree_10(order, phi, sin_theta, cos_theta,  norm_factor):
+def sph_harm_degree_10(order, phi, sin_theta, cos_theta, norm):
     if order == -10:
-        return norm_factor[10] * 654729075 * sin_theta**10 * np.sin(10 * phi)
+        return norm[10] * 654729075 * sin_theta**10 * np.sin(10 * phi)
     elif order == -9:
-        return norm_factor[9] * 654729075 * sin_theta**9 * cos_theta * np.sin(9 * phi)
+        return norm[9] * 654729075 * sin_theta**9 * cos_theta * np.sin(9 * phi)
     elif order == -8:
-        return norm_factor[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta**2 - 1) * np.sin(8 * phi)
+        return norm[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta ** 2 - 1) * np.sin(8 * phi)
     elif order == -7:
-        return norm_factor[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta**3 - 3 * cos_theta) * np.sin(7 * phi)
+        return norm[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta ** 3 - 3 * cos_theta) * np.sin(7 * phi)
     elif order == -6:
-        return norm_factor[6] * 84459.375 * sin_theta**6 \
+        return norm[6] * 84459.375 * sin_theta**6 \
             * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.sin(6 * phi)
     elif order == -5:
-        return norm_factor[5] * 16891.875 * sin_theta**5 \
+        return norm[5] * 16891.875 * sin_theta**5 \
             * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.sin(5 * phi)
     elif order == -4:
-        return norm_factor[4] * 2815.3125 * sin_theta**4 \
+        return norm[4] * 2815.3125 * sin_theta**4 \
             * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.sin(4 * phi)
     elif order == -3:
-        return norm_factor[3] * 402.1875 * sin_theta**3 \
+        return norm[3] * 402.1875 * sin_theta**3 \
             * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.sin(3 * phi)
     elif order == -2:
-        return norm_factor[2] * 3.8671875 * sin_theta**2 \
+        return norm[2] * 3.8671875 * sin_theta**2 \
             * (4199 * cos_theta**8 - 6188 * cos_theta**6 + 2730 * cos_theta**4 - 364 * cos_theta**2 + 7) \
             * np.sin(2 * phi)
     elif order == -1:
-        return norm_factor[1] * 0.4296875 * sin_theta \
+        return norm[1] * 0.4296875 * sin_theta \
             * (4199 * cos_theta**9 - 7956 * cos_theta**7 + 4914 * cos_theta**5 - 1092 * cos_theta**3 + 63 * cos_theta) \
             * np.sin(phi)
     elif order == 0:
-        return norm_factor[0] * 0.00390625 \
+        return norm[0] * 0.00390625 \
             * (46189 * cos_theta**10 - 109395 * cos_theta**8 + 90090 * cos_theta**6
                - 30030 * cos_theta**4 + 3465 * cos_theta**2 - 63)
     elif order == 1:
-        return norm_factor[1] * 0.4296875 * sin_theta \
+        return norm[1] * 0.4296875 * sin_theta \
             * (4199 * cos_theta**9 - 7956 * cos_theta**7 + 4914 * cos_theta**5
                - 1092 * cos_theta**3 + 63 * cos_theta) * np.cos(phi)
     elif order == 2:
-        return norm_factor[2] * 3.8671875 * sin_theta**2 \
+        return norm[2] * 3.8671875 * sin_theta**2 \
             * (4199 * cos_theta**8 - 6188 * cos_theta**6 + 2730 * cos_theta**4 - 364 * cos_theta**2 + 7) \
             * np.cos(2 * phi)
     elif order == 3:
-        return norm_factor[3] * 402.1875 * sin_theta**3 \
+        return norm[3] * 402.1875 * sin_theta**3 \
             * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.cos(3 * phi)
     elif order == 4:
-        return norm_factor[4] * 2815.3125 * sin_theta**4 \
+        return norm[4] * 2815.3125 * sin_theta**4 \
             * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.cos(4 * phi)
     elif order == 5:
-        return norm_factor[5] * 16891.875 * sin_theta**5 \
+        return norm[5] * 16891.875 * sin_theta**5 \
             * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.cos(5 * phi)
     elif order == 6:
-        return norm_factor[6] * 84459.375 * sin_theta**6 \
+        return norm[6] * 84459.375 * sin_theta**6 \
             * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.cos(6 * phi)
     elif order == 7:
-        return norm_factor[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta**3 - 3 * cos_theta) * np.cos(7 * phi)
+        return norm[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta ** 3 - 3 * cos_theta) * np.cos(7 * phi)
     elif order == 8:
-        return norm_factor[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta**2 - 1) * np.cos(8 * phi)
+        return norm[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta ** 2 - 1) * np.cos(8 * phi)
     elif order == 9:
-        return norm_factor[9] * 654729075 * sin_theta**9 * cos_theta * np.cos(9 * phi)
+        return norm[9] * 654729075 * sin_theta**9 * cos_theta * np.cos(9 * phi)
     elif order == 10:
-        return norm_factor[10] * 654729075 * sin_theta**10 * np.cos(10 * phi)
+        return norm[10] * 654729075 * sin_theta**10 * np.cos(10 * phi)

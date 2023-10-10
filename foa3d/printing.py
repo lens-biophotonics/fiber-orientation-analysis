@@ -89,8 +89,8 @@ def print_frangi_info(alpha, beta, gamma, scales_um, image_shape_um, in_slice_sh
     print(u"\n\u03B1: {0:.3f}\n".format(alpha)
           + u"\u03B2: {0:.3f}\n".format(beta)
           + u"\u03B3: {0}\n".format(gamma))
-    print("Scales     [\u03BCm]: {}".format(scales_um))
-    print("Diameters  [\u03BCm]: {}".format(4 * scales_um))
+    print("Enhanced scales      [\u03BCm]: {}".format(scales_um))
+    print("Enhanced diameters   [\u03BCm]: {}\n".format(4 * scales_um))
 
     # print iterative analysis information
     print_slicing_info(image_shape_um, in_slice_shape_um, tot_slice_num, px_size, image_item_size)
@@ -114,6 +114,25 @@ def print_analysis_time(start_time):
     """
     _, mins, secs = elapsed_time(start_time)
     print("\nVolume image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs))
+
+
+def print_blur(smooth_sigma_um):
+    """
+    Print gaussian lowpass filter standard deviation.
+
+    Parameters
+    ----------
+    smooth_sigma_um: numpy.ndarray (shape=(3,), dtype=int)
+        3D standard deviation of the low-pass Gaussian filter [μm]
+        (resolution anisotropy correction)
+
+    Returns
+    -------
+    None
+    """
+    print("\n                              Z      Y      X")
+    print("Gaussian blur \u03C3      [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
+          .format(smooth_sigma_um[0], smooth_sigma_um[1], smooth_sigma_um[2]), end='\r')
 
 
 def print_import_time(start_time):
@@ -158,10 +177,6 @@ def print_pipeline_heading():
     """
     Print Foa3D pipeline heading.
 
-    Parameters
-    ----------
-    None
-
     Returns
     -------
     None
@@ -173,18 +188,14 @@ def print_prepro_heading():
     """
     Print preprocessing heading.
 
-    Parameters
-    ----------
-    None
-
     Returns
     -------
     None
     """
-    print(color_text(0, 191, 255, "\n\nMicroscopy Volume Image Preprocessing"), end='\r')
+    print(color_text(0, 191, 255, "\n\nMicroscopy Volume Image Preprocessing"))
 
 
-def print_resolution(px_size, psf_fwhm):
+def print_native_res(px_size, psf_fwhm):
     """
     Print pixel and optical resolution of the microscopy system.
 
@@ -202,6 +213,26 @@ def print_resolution(px_size, psf_fwhm):
     """
     print("Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_size[0], px_size[1], px_size[2]))
     print("PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
+
+
+def print_new_res(px_sz_iso, psf_fwhm):
+    """
+    Print adjusted isotropic spatial resolution.
+
+    Parameters
+    ----------
+    px_sz_iso: numpy.ndarray (shape=(3,), dtype=float)
+        new isotropic pixel size [μm]
+
+    psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
+        3D FWHM of the PSF [μm]
+
+    Returns
+    -------
+    None
+    """
+    print("\nAdjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_sz_iso[0], px_sz_iso[1], px_sz_iso[2]))
+    print("Adjusted PSF FWHM    [μm]: ({0:.3f}, {0:.3f}, {0:.3f})\n".format(psf_fwhm[0]))
 
 
 def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, image_item_size):
@@ -247,11 +278,11 @@ def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, i
           .format(image_shape_um[0], image_shape_um[1], image_shape_um[2]))
     print("Total image size     [MB]: {0}\n"
           .format(np.ceil(image_size / 1024**2).astype(int)))
-    print("Basic slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
+    print("Image slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
           .format(slice_shape_um[0], slice_shape_um[1], slice_shape_um[2]))
-    print("Basic slice size     [MB]: {0}"
+    print("Image slice size     [MB]: {0}"
           .format(np.ceil(max_slice_size / 1024**2).astype(int)))
-    print("Basic slice number:        {0}\n"
+    print("Image slice number:        {0}\n"
           .format(tot_slice_num))
 
 
@@ -268,13 +299,11 @@ def print_soma_masking(lpf_soma_mask):
     -------
     None
     """
-    if lpf_soma_mask:
-        print("Lipofuscin-based soma masking: ON\n")
-    else:
-        print("Lipofuscin-based soma masking: OFF\n")
+    prt = 'Lipofuscin soma mask: '
+    print('{}active\n'.format(prt)) if lpf_soma_mask else print('{}not active\n'.format(prt))
 
 
-def print_image_shape(cli_args, img, mosaic, channel_ax=None):
+def print_image_shape(cli_args, img, is_tiled, channel_ax=None):
     """
     Print volume image shape.
 
@@ -286,7 +315,7 @@ def print_image_shape(cli_args, img, mosaic, channel_ax=None):
     img: numpy.ndarray (shape=(Z,Y,X))
         microscopy volume image
 
-    mosaic: bool
+    is_tiled: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
     channel_ax: int
@@ -304,7 +333,7 @@ def print_image_shape(cli_args, img, mosaic, channel_ax=None):
     # adapt axis order
     img_shape = img.shape
     if len(img_shape) == 4:
-        channel_ax = 1 if mosaic else -1
+        channel_ax = 1 if is_tiled else -1
 
     # get image shape
     if channel_ax is not None:
