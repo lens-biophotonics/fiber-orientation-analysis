@@ -190,6 +190,9 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6, ram=None)
     odi_anis: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized array of orientation dispersion anisotropy parameters
 
+    disarray: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+        local angular disarray
+
     vec_tensor_eigen: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         initialized array of fiber orientation tensor eigenvalues
     """
@@ -215,16 +218,20 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6, ram=None)
                     name='tensor_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
     # create ODI memory maps
-    odi_pri, _ = init_volume(odi_shape, dtype='uint8',
+    odi_pri, _ = init_volume(odi_shape, dtype='float32',
                              name='odi_pri_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
-    odi_sec, _ = init_volume(odi_shape, dtype='uint8',
+    odi_sec, _ = init_volume(odi_shape, dtype='float32',
                              name='odi_sec_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
-    odi_tot, _ = init_volume(odi_shape, dtype='uint8',
+    odi_tot, _ = init_volume(odi_shape, dtype='float32',
                              name='odi_tot_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
-    odi_anis, _ = init_volume(odi_shape, dtype='uint8',
+    odi_anis, _ = init_volume(odi_shape, dtype='float32',
                               name='odi_anis_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
-    return odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, vec_tensor_eigen
+    # create disarray map
+    disarray, _ = init_volume(odi_shape, dtype='float32',
+                              name='disarray{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
+
+    return odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, disarray, vec_tensor_eigen
 
 
 def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+', ram=None):
@@ -623,7 +630,7 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
     odf_scale = int(np.ceil(odf_scale_um / px_size_iso[0]))
 
     # initialize ODF analysis output volumes
-    odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, tensor \
+    odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, disarray, tensor \
         = init_odf_volumes(fiber_vec_img.shape[:-1], tmp_dir, odf_scale=odf_scale, odf_degrees=odf_deg, ram=ram)
 
     # generate downsampled background for MRtrix3 mrview
@@ -631,11 +638,12 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
     generate_odf_background(bg_img, bg_mrtrix, vxl_side=odf_scale)
 
     # compute ODF coefficients
-    odf = compute_odf_map(fiber_vec_img, odf, odi_pri, odi_sec, odi_tot, odi_anis, tensor, odf_scale, odf_norm,
-                          odf_deg=odf_deg)
+    odf = compute_odf_map(fiber_vec_img, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, tensor,
+                          odf_scale, odf_norm, odf_deg=odf_deg)
 
     # save memory maps to file
-    save_odf_arrays(odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, px_size_iso, save_dir, img_name, odf_scale_um)
+    save_odf_arrays(odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, disarray,
+                    px_size_iso, save_dir, img_name, odf_scale_um)
 
 
 def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name,
@@ -889,7 +897,7 @@ def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_
         save_array('soma_msk_{0}'.format(img_name), save_dir, soma_msk, px_size)
 
 
-def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, px_size, save_dir, img_name, odf_scale_um):
+def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_size, save_dir, img_name, odf_scale_um):
     """
     Save the output arrays of the ODF analysis stage to TIF and Nifti files.
     Arrays tagged with 'mrtrixview' are preliminarily transformed
@@ -904,17 +912,19 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, px_size, save_
     bg: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
         background for ODF visualization in MRtrix3
 
-    odi_pri: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_pri: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion parameter
 
-    odi_sec: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_sec: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
         secondary orientation dispersion parameter
 
-    odi_tot: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_tot: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
         total orientation dispersion parameter
 
-    odi_anis: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_anis: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
         orientation dispersion anisotropy parameter
+
+    disarray: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
 
     px_size: numpy.ndarray (shape=(3,), dtype=float)
         pixel size (Z,Y,X) [μm]
@@ -939,3 +949,4 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, px_size, save_
     save_array('odi_sec_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_sec, px_size, odi=True)
     save_array('odi_tot_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_tot, px_size, odi=True)
     save_array('odi_anis_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_anis, px_size, odi=True)
+    save_array('disarray_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, disarray, px_size, odi=True)

@@ -6,6 +6,28 @@ from skimage.transform import resize
 from foa3d.utils import normalize_image, transform_axes
 
 
+def compute_disarray(fiber_vec):
+    """
+    Compute local angular disarray, i.e. the misalignment degree of nearby orientation vectors
+    with respect to the mean direction (Giardini et al., Front. Physiol. 2021).
+
+    Parameters
+    ----------
+    fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
+        array of fiber orientation vectors
+        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
+
+    Returns
+    -------
+    disarray: float32
+        local angular disarray
+    """
+    fiber_vec = np.delete(fiber_vec, np.all(fiber_vec == 0, axis=-1), axis=0)
+    disarray = (1 - np.linalg.norm(np.mean(fiber_vec, axis=0))).astype(np.float32)
+
+    return disarray
+
+
 @njit(cache=True)
 def compute_fiber_angles(fiber_vec, norm):
     """
@@ -38,8 +60,8 @@ def compute_fiber_angles(fiber_vec, norm):
     return phi, theta
 
 
-def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_tensor_eigen, vxl_side, odf_norm,
-                    odf_deg=6, vxl_thr=0.5, vec_thr=-1):
+def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, vec_tensor_eigen, vxl_side, odf_norm,
+                    odf_deg=6, vxl_thr=0.5, vec_thr=0.000001):
     """
     Compute the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -63,6 +85,9 @@ def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_ten
 
     odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         orientation dispersion index anisotropy
+
+    disarray: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+        local angular disarray
 
     vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         initialized array of orientation tensor eigenvalues
@@ -114,6 +139,7 @@ def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, vec_ten
                     zv, yv, xv = z // vxl_side, y // vxl_side, x // vxl_side
                     odf[zv, yv, xv, :] = fiber_vectors_to_sph_harm(vec_arr, odf_deg, odf_norm)
                     vec_tensor_eigen[zv, yv, xv, :] = compute_vec_tensor_eigen(vec_arr)
+                    disarray[zv, yv, xv] = compute_disarray(vec_arr)
 
     # compute slice-wise dispersion and anisotropy parameters
     compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, odi_anis)
@@ -152,16 +178,16 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
 
     Returns
     -------
-    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion index
 
-    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         secondary orientation dispersion index
 
-    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         total orientation dispersion index
 
-    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         orientation dispersion index anisotropy
     """
 
@@ -170,21 +196,17 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
     k3 = np.abs(vec_tensor_eigen[..., 0])
     diff = np.abs(vec_tensor_eigen[..., 1] - vec_tensor_eigen[..., 0])
 
-    # primary dispersion (1.2732395447351628 = 4/π)
-    odi_pri[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, k2))) \
-        .astype(np.uint8)
+    # primary dispersion (0.3183098861837907 = 1/π)
+    odi_pri[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k2)).astype(np.float32)
 
     # secondary dispersion
-    odi_sec[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, k3))) \
-        .astype(np.uint8)
+    odi_sec[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k3)).astype(np.float32)
 
     # total dispersion
-    odi_tot[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3)))))) \
-        .astype(np.uint8)
+    odi_tot[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3))))).astype(np.float32)
 
     # dispersion anisotropy
-    odi_anis[:] = (255 * (2 - 1.2732395447351628 * np.arctan2(k1, diff))) \
-        .astype(np.uint8)
+    odi_anis[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, diff)).astype(np.float32)
 
 
 @njit(cache=True)
