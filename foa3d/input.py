@@ -84,11 +84,13 @@ def get_cli_parser():
     cli_parser.add_argument('--z-max', type=float, default=None, help='forced maximum output z-depth [μm]')
     cli_parser.add_argument('--hsv', action='store_true', default=False,
                             help='toggle HSV colormap for 3D fiber orientations')
-    cli_parser.add_argument('-o', '--odf-res', nargs='+', type=float, help='side of the fiber ODF super-voxels: '
-                                                                           'do not generate ODFs if None [μm]')
+    cli_parser.add_argument('--odf-res', nargs='+', type=float, help='side of the fiber ODF super-voxels: '
+                                                                     'do not generate ODFs if None [μm]')
     cli_parser.add_argument('--odf-deg', type=int, default=6,
                             help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
-
+    cli_parser.add_argument('-o', '--out', type=str, default=None,
+                            help='output directory')
+    
     # parse arguments
     cli_args = cli_parser.parse_args()
 

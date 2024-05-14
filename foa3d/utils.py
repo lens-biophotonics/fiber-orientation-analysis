@@ -468,7 +468,7 @@ def hsv_orient_cmap(vec_img):
 
     # compute the in-plane versor length
     vxy_abs = np.sqrt(np.square(vx) + np.square(vy))
-    vxy_abs = np.divide(vxy_abs, np.max(vxy_abs))
+    vxy_abs = divide_nonzero(vxy_abs, np.max(vxy_abs))
 
     # compute the in-plane angular orientation
     vxy_ang = normalize_angle(np.arctan2(vy, vx), lower=0, upper=np.pi, dtype=np.float32)

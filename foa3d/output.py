@@ -1,5 +1,5 @@
 from datetime import datetime
-from os import mkdir, path
+from os import makedirs, path
 
 import nibabel as nib
 import numpy as np
@@ -34,32 +34,35 @@ def create_save_dirs(img_path, img_name, cli_args, is_fiber=False):
     # get current time
     time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    # get base path
-    base_path = path.dirname(img_path)
+    # get output path
+    out_path = cli_args.out
+    if out_path is None:
+        out_path = path.dirname(img_path)
 
     # create saving directory
-    base_dir = path.join(base_path, time_stamp + '_' + img_name)
-    save_dir = list()
-    if not path.isdir(base_dir):
-        mkdir(base_dir)
+    base_out_dir = path.join(out_path, time_stamp + '_' + img_name)
+    save_dir_lst = list()
+    if not path.isdir(base_out_dir):
+        print("Creating directory")
+        makedirs(base_out_dir)
 
     # create Frangi filter output subdirectory
     if not is_fiber:
-        frangi_dir = path.join(base_dir, 'frangi')
-        mkdir(frangi_dir)
-        save_dir.append(frangi_dir)
+        frangi_dir = path.join(base_out_dir, 'frangi')
+        makedirs(frangi_dir)
+        save_dir_lst.append(frangi_dir)
     else:
-        save_dir.append(None)
+        save_dir_lst.append(None)
 
     # create ODF analysis output subdirectory
     if cli_args.odf_res is not None:
-        odf_dir = path.join(base_dir, 'odf')
-        mkdir(odf_dir)
-        save_dir.append(odf_dir)
+        odf_dir = path.join(base_out_dir, 'odf')
+        makedirs(odf_dir)
+        save_dir_lst.append(odf_dir)
     else:
-        save_dir.append(None)
+        save_dir_lst.append(None)
 
-    return save_dir
+    return save_dir_lst
 
 
 def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):
