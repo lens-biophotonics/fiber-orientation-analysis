@@ -178,7 +178,7 @@ def compute_slice_shape(img_shape, item_size, px_size=None, max_size=1e6, ovlp=0
         return slice_shape
 
 
-def compute_overlap_range(smooth_sigma, frangi_sigma, px_rsz_ratio, truncate=4):
+def compute_overlap_range(smooth_sigma, frangi_sigma, px_rsz_ratio, truncate=2):
     """
     Compute lateral slice extension range
     for coping with smoothing-related boundary artifacts.
@@ -211,9 +211,7 @@ def compute_overlap_range(smooth_sigma, frangi_sigma, px_rsz_ratio, truncate=4):
     if smooth_sigma is not None:
         frangi_sigma = np.concatenate((smooth_sigma, frangi_sigma))
 
-    max_sigma = np.max(frangi_sigma)
-
-    ovlp = int(np.ceil(2 * truncate * max_sigma) // 2) if smooth_sigma is not None else 0
+    ovlp = int(np.ceil(2 * truncate * np.max(frangi_sigma)) // 2)
 
     if px_rsz_ratio is not None:
         rsz_ovlp = np.multiply(ovlp * np.ones((3,)), px_rsz_ratio).astype(int)
