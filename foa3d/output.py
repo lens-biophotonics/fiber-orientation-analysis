@@ -43,7 +43,6 @@ def create_save_dirs(img_path, img_name, cli_args, is_fiber=False):
     base_out_dir = path.join(out_path, time_stamp + '_' + img_name)
     save_dir_lst = list()
     if not path.isdir(base_out_dir):
-        print("Creating directory")
         makedirs(base_out_dir)
 
     # create Frangi filter output subdirectory

@@ -34,35 +34,41 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
         new isotropic pixel size [μm]
     """
 
-    # print preprocessing heading
-    print_prepro_heading()
-
     # set the isotropic pixel resolution equal to the z-sampling step
     px_sz_iso = px_sz[0] * np.ones(shape=(3,))
 
-    # adjust PSF anisotropy via lateral Gaussian blurring
-    if not np.all(psf_fwhm == psf_fwhm[0]):
+    # detect preprocessing requirement
+    cndt_1 = not np.all(psf_fwhm == psf_fwhm[0])
+    cndt_2 = np.any(px_sz != 1.0)
+    smooth_sigma = None
+    if cndt_1 or cndt_2:
 
-        # estimate the PSF variance from input FWHM values [μm^2]
-        psf_var = np.square(fwhm_to_sigma(psf_fwhm))
+        # print preprocessing heading
+        print_prepro_heading()
 
-        # estimate the in-plane filter variance [μm^2]
-        gauss_var = np.array([0, psf_var[0] - psf_var[1], psf_var[0] - psf_var[2]])
+        # adjust PSF anisotropy via lateral Gaussian blurring
+        if cndt_1:
 
-        # ...and the corresponding standard deviation [px]
-        smooth_sigma = np.divide(np.sqrt(gauss_var), px_sz)
+            # estimate the PSF variance from input FWHM values [μm^2]
+            psf_var = np.square(fwhm_to_sigma(psf_fwhm))
 
-        # print preprocessing info
-        smooth_sigma_um = np.multiply(smooth_sigma, px_sz)
-        print_blur(smooth_sigma_um)
+            # estimate the in-plane filter variance [μm^2]
+            gauss_var = np.array([0, psf_var[0] - psf_var[1], psf_var[0] - psf_var[2]])
 
-    # (no blurring)
+            # ...and the corresponding standard deviation [px]
+            smooth_sigma = np.divide(np.sqrt(gauss_var), px_sz)
+
+            # print preprocessing info
+            smooth_sigma_um = np.multiply(smooth_sigma, px_sz)
+            print_blur(smooth_sigma_um, psf_fwhm)
+
+        # print pixel resize info
+        if cndt_2:
+            print_new_res(px_sz_iso)
+
+    # skip line
     else:
-        print("\n")
-        smooth_sigma = None
-
-    # print pixel resize info
-    print_new_res(px_sz_iso, psf_fwhm)
+        print()
 
     return smooth_sigma, px_sz_iso
 

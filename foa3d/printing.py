@@ -116,7 +116,7 @@ def print_analysis_time(start_time):
     print("\nVolume image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs))
 
 
-def print_blur(smooth_sigma_um):
+def print_blur(smooth_sigma_um, psf_fwhm):
     """
     Print gaussian lowpass filter standard deviation.
 
@@ -126,13 +126,16 @@ def print_blur(smooth_sigma_um):
         3D standard deviation of the low-pass Gaussian filter [μm]
         (resolution anisotropy correction)
 
+    psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
+        3D FWHM of the PSF [μm]
+
     Returns
     -------
     None
     """
-    print("\n                              Z      Y      X")
     print("Gaussian blur \u03C3      [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
-          .format(smooth_sigma_um[0], smooth_sigma_um[1], smooth_sigma_um[2]), end='\r')
+          .format(smooth_sigma_um[0], smooth_sigma_um[1], smooth_sigma_um[2]))
+    print("Adjusted PSF FWHM    [μm]: ({0:.3f}, {0:.3f}, {0:.3f})\n".format(psf_fwhm[0]))
 
 
 def print_import_time(start_time):
@@ -193,6 +196,7 @@ def print_prepro_heading():
     None
     """
     print(color_text(0, 191, 255, "\n\nMicroscopy Volume Image Preprocessing"))
+    print("\n                              Z      Y      X")
 
 
 def print_native_res(px_size, psf_fwhm):
@@ -215,7 +219,7 @@ def print_native_res(px_size, psf_fwhm):
     print("PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
-def print_new_res(px_sz_iso, psf_fwhm):
+def print_new_res(px_sz_iso):
     """
     Print adjusted isotropic spatial resolution.
 
@@ -224,15 +228,11 @@ def print_new_res(px_sz_iso, psf_fwhm):
     px_sz_iso: numpy.ndarray (shape=(3,), dtype=float)
         new isotropic pixel size [μm]
 
-    psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
-        3D FWHM of the PSF [μm]
-
     Returns
     -------
     None
     """
-    print("\nAdjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_sz_iso[0], px_sz_iso[1], px_sz_iso[2]))
-    print("Adjusted PSF FWHM    [μm]: ({0:.3f}, {0:.3f}, {0:.3f})\n".format(psf_fwhm[0]))
+    print("Adjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})\n".format(px_sz_iso[0], px_sz_iso[1], px_sz_iso[2]))
 
 
 def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, image_item_size):
