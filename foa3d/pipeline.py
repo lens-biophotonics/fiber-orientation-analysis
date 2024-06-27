@@ -876,9 +876,9 @@ def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_
     # move large fiber orientation dataset to saving directory
     if fiber_dset_path is not None:
         shutil.move(fiber_dset_path, path.join(save_dir, 'fiber_vec_{0}.h5'.format(img_name)))
-    # or save orientation vectors to NumPy file
+    # or save orientation vectors to TIFF
     else:
-        save_array('fiber_vec_{0}'.format(img_name), save_dir, fiber_vec_img, fmt='npy')
+        save_array('fiber_vec_{0}'.format(img_name), save_dir, np.moveaxis(fiber_vec_img, -1, 1), px_size)
 
     # save orientation color map to TIFF
     save_array('fiber_cmap_{0}'.format(img_name), save_dir, fiber_vec_clr, px_size)
