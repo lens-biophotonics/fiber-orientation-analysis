@@ -275,7 +275,7 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
     if ram is None:
         ram = psutil.virtual_memory()[1]
     item_sz = get_item_size(dtype)
-    vol_sz = item_sz * np.prod(shape)
+    vol_sz = item_sz * np.prod(shape).astype(np.float64)
 
     # create memory-mapped array or HDF5 file depending on available memory resources
     if vol_sz >= ram:
@@ -289,8 +289,9 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
 
 def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, scales_px, px_rsz_ratio, z_sel,
                    fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, iso_fiber_img, fiber_msk, soma_msk,
-                   ch_lpf=0, ch_mye=1, alpha=0.05, beta=1, gamma=100, dark=False, mask_lpf=False, hsv_vec_cmap=False,
-                   pad_mode='reflect', is_tiled=False, fiber_thresh='li', soma_thresh='yen'):
+                   tissue_msk=None, ch_lpf=0, ch_mye=1, alpha=0.05, beta=1, gamma=100, dark=False, mask_lpf=False,
+                   hsv_vec_cmap=False, pad_mode='reflect', is_tiled=False, fiber_thresh='li', soma_thresh='yen',
+                   mip_thr=0.005):
     """
     Conduct a Frangi-based fiber orientation analysis on basic slices selected from the whole microscopy volume image.
 
@@ -349,6 +350,9 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     soma_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         soma mask image
 
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
+
     ch_lpf: int
         neuronal bodies channel
 
@@ -369,7 +373,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
         (i.e., negative contrast polarity)
 
     hsv_vec_cmap: bool
-        if True, generate a HSV orientation color map based on XY-plane orientation angles
+        if True, generate an HSV orientation color map based on XY-plane orientation angles
         (instead of an RGB map using the cartesian components of the estimated vectors)
 
     mask_lpf: bool
@@ -388,32 +392,43 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     soma_thresh: str
         soma channel thresholding method
 
+    mip_thr: float
+        relative threshold on non-zero tissue MIP pixels
+
     Returns
     -------
     None
     """
 
     # slice fiber image slice
-    fiber_slice = slice_channel(img, rng_in, channel=ch_mye, is_tiled=is_tiled)
+    fiber_slice, tissue_msk_slice = slice_channel(img, rng_in, channel=ch_mye, tissue_msk=tissue_msk, is_tiled=is_tiled)
 
     # skip background slice
-    if np.max(fiber_slice) != 0:
+    crt = np.count_nonzero(tissue_msk_slice) / np.prod(tissue_msk_slice.shape) > mip_thr \
+        if tissue_msk_slice is not None else np.max(fiber_slice) != 0
+    if crt:
 
         # preprocess fiber slice
-        iso_fiber_slice, rsz_pad = \
-            correct_image_anisotropy(fiber_slice, px_rsz_ratio, sigma=smooth_sigma, pad=pad)
+        iso_fiber_slice, rsz_pad, rsz_tissue_msk_slice = \
+            correct_image_anisotropy(fiber_slice, px_rsz_ratio,
+                                     sigma=smooth_sigma, pad=pad, tissue_msk=tissue_msk_slice)
 
         # pad fiber slice if required
         if rsz_pad is not None:
             iso_fiber_slice = np.pad(iso_fiber_slice, rsz_pad, mode=pad_mode)
+
+            # pad tissue mask if available
+            if rsz_tissue_msk_slice is not None:
+                rsz_tissue_msk_slice = np.pad(rsz_tissue_msk_slice, rsz_pad, mode='constant')
 
         # 3D Frangi filter
         frangi_slice, fiber_vec_slice, eigenval_slice = \
             frangi_filter(iso_fiber_slice, scales_px=scales_px, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
         # crop resulting slices
-        iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice = \
-            crop_slice_lst([iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice], rng_out, ovlp=ovlp)
+        iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice = \
+            crop_slice_lst([iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice],
+                           rng_out, ovlp=ovlp)
 
         # generate fractional anisotropy image
         frac_anis_slice = compute_fractional_anisotropy(eigenval_slice)
@@ -423,7 +438,8 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
 
         # remove background
         fiber_vec_slice, fiber_clr_slice, fiber_msk_slice = \
-            mask_background(frangi_slice, fiber_vec_slice, fiber_clr_slice, method=fiber_thresh, invert=False)
+            mask_background(frangi_slice, fiber_vec_slice, fiber_clr_slice,
+                            tissue_msk=rsz_tissue_msk_slice, method=fiber_thresh, invert=False)
 
         # (optional) neuronal body masking
         if mask_lpf:
@@ -432,7 +448,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
             soma_slice = slice_channel(img, rng_in_neu, channel=ch_lpf, is_tiled=is_tiled)
 
             # resize soma slice (lateral blurring and downsampling)
-            iso_soma_slice, _ = correct_image_anisotropy(soma_slice, px_rsz_ratio)
+            iso_soma_slice, _, _ = correct_image_anisotropy(soma_slice, px_rsz_ratio)
 
             # crop isotropized soma slice
             iso_soma_slice = crop_slice(iso_soma_slice, rng_out)
@@ -525,7 +541,8 @@ def fill_frangi_volumes(fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img,
         soma_msk[rng_out] = (255 * soma_msk_slice[z_sel, ...]).astype(np.uint8)
 
 
-def mask_background(img, fiber_vec_slice, fiber_clr_slice, frac_anis_slice=None, method='yen', invert=False):
+def mask_background(img, fiber_vec_slice, fiber_clr_slice,
+                    frac_anis_slice=None, method='yen', invert=False, tissue_msk=None):
     """
     Mask orientation volume arrays.
 
@@ -549,6 +566,9 @@ def mask_background(img, fiber_vec_slice, fiber_clr_slice, frac_anis_slice=None,
     invert: bool
         mask inversion flag
 
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
+
     Returns
     -------
     fiber_vec_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
@@ -566,6 +586,10 @@ def mask_background(img, fiber_vec_slice, fiber_clr_slice, frac_anis_slice=None,
 
     # generate background mask
     background = create_background_mask(img, method=method)
+
+    # apply tissue reconstruction mask, when provided
+    if tissue_msk is not None:
+        background = np.logical_or(background, np.logical_not(tissue_msk))
 
     # invert mask
     if invert:
@@ -646,7 +670,7 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
                     px_size_iso, save_dir, img_name, odf_scale_um)
 
 
-def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name,
+def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, tissue_msk=None,
                               ram=None, jobs=4, backend='threading', is_tiled=False, verbose=100):
     """
     Apply 3D Frangi filtering to basic TPFM image slices using parallel threads.
@@ -667,6 +691,9 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name,
 
     img_name: str
         name of the microscopy volume image
+
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
 
     ram: float
         maximum RAM available to the Frangi filtering stage [B]
@@ -744,9 +771,9 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name,
                                     rng_in_lst[i], rng_in_lpf_lst[i], rng_out_lst[i], pad_lst[i], rsz_ovlp,
                                     smooth_sigma, frangi_sigma_px, px_rsz_ratio, z_sel,
                                     fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img,
-                                    iso_fiber_img, fiber_msk, soma_msk, ch_lpf=ch_lpf, ch_mye=ch_mye,
-                                    alpha=alpha, beta=beta, gamma=gamma, mask_lpf=mask_lpf,
-                                    hsv_vec_cmap=hsv_vec_cmap, is_tiled=is_tiled)
+                                    iso_fiber_img, fiber_msk, soma_msk, tissue_msk=tissue_msk,
+                                    ch_lpf=ch_lpf, ch_mye=ch_mye, alpha=alpha, beta=beta, gamma=gamma,
+                                    mask_lpf=mask_lpf, hsv_vec_cmap=hsv_vec_cmap, is_tiled=is_tiled)
             for i in range(tot_slice_num))
 
     # save Frangi output arrays

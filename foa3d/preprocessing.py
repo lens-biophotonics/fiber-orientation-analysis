@@ -73,7 +73,8 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
     return smooth_sigma, px_sz_iso
 
 
-def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mode='reflect', anti_alias=True, trunc=4):
+def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mode='reflect',
+                             anti_alias=True, trunc=4, tissue_msk=None):
     """
     Smooth the input volume image along the X and Y axes so that the lateral
     and longitudinal sizes of the optical system's PSF become equal.
@@ -98,10 +99,13 @@ def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mo
         image padding mode adopted for the smoothing Gaussian filter
 
     anti_alias: bool
-        if True, apply an anti-aliasing filter when downsampling the XY plane
+        if True, apply an antialiasing filter when downsampling the XY plane
 
     trunc: int
         truncate the Gaussian kernel at this many standard deviations
+
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
 
     Returns
     -------
@@ -110,10 +114,19 @@ def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mo
 
     rsz_pad: numpy.ndarray (shape=(3,2), dtype=int)
         resized image padding array
+
+    rsz_tissue_msk: numpy.ndarray (dtype=bool)
+        resized tissue reconstruction binary mask
     """
     # no resizing
     if np.all(rsz_ratio == 1):
-        return img, pad
+
+        # resize tissue mask, when available
+        if tissue_msk is not None:
+            tissue_msk = tissue_msk[np.newaxis, ...]
+            tissue_msk = np.repeat(tissue_msk, img.shape[0], axis=0)
+
+        return img, pad, tissue_msk
 
     # lateral blurring
     else:
@@ -128,9 +141,15 @@ def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mo
                 resize(img[z, ...], output_shape=tuple(iso_shape[1:]), anti_aliasing=anti_alias, preserve_range=True)
 
         # resize padding array accordingly
-        if pad is not None:
-            rsz_pad = np.floor(np.multiply(np.array([rsz_ratio, rsz_ratio]).transpose(), pad)).astype(int)
-            return iso_img, rsz_pad
+        rsz_pad = np.floor(np.multiply(np.array([rsz_ratio, rsz_ratio]).transpose(), pad)).astype(int) \
+            if pad is not None else None
 
+        # resize tissue mask, when available
+        if tissue_msk is not None:
+            rsz_tissue_msk = resize(tissue_msk, output_shape=tuple(iso_shape[1:]), preserve_range=True)
+            rsz_tissue_msk = rsz_tissue_msk[np.newaxis, ...]
+            rsz_tissue_msk = np.repeat(rsz_tissue_msk, iso_shape[0], axis=0)
         else:
-            return iso_img, None
+            rsz_tissue_msk = None
+
+        return iso_img, rsz_pad, rsz_tissue_msk

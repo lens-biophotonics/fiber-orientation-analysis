@@ -101,7 +101,7 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):
         px_sz_z, px_sz_y, px_sz_x = px_sz
 
         # adjust bigtiff optional argument
-        bigtiff = True if nd_array.itemsize * np.prod(nd_array.shape) >= 4294967296 else False
+        bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
 
         # save array to TIFF file
         out_name = '{}.{}'.format(fname, fmt)

@@ -484,7 +484,8 @@ def crop_slice_lst(img_slice_lst, rng, ovlp=None, flipped=()):
     """
 
     for s, img_slice in enumerate(img_slice_lst):
-        img_slice_lst[s] = crop_slice(img_slice, rng, ovlp=ovlp, flipped=flipped)
+        if img_slice is not None:
+            img_slice_lst[s] = crop_slice(img_slice, rng, ovlp=ovlp, flipped=flipped)
 
     return img_slice_lst
 
@@ -522,7 +523,7 @@ def get_slice_size(max_ram, mem_growth_factor, mem_fudge_factor, slice_batch_siz
     return slice_size
 
 
-def slice_channel(img, rng, channel, is_tiled=False):
+def slice_channel(img, rng, channel, tissue_msk=None, is_tiled=False):
     """
     Slice desired channel from input image volume.
 
@@ -537,6 +538,9 @@ def slice_channel(img, rng, channel, is_tiled=False):
     channel: int
         image channel axis
 
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
+
     is_tiled: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
@@ -544,18 +548,20 @@ def slice_channel(img, rng, channel, is_tiled=False):
     -------
     img_slice: numpy.ndarray
         sliced image patch
+    
+    tissue_msk_slice: numpy.ndarray (dtype=bool)
+        sliced tissue reconstruction binary mask
     """
     z_rng, r_rng, c_rng = rng
 
     if channel is None:
         img_slice = img[z_rng, r_rng, c_rng]
     else:
-        if is_tiled:
-            img_slice = img[z_rng, channel, r_rng, c_rng]
-        else:
-            img_slice = img[z_rng, r_rng, c_rng, channel]
+        img_slice = img[z_rng, channel, r_rng, c_rng] if is_tiled else img[z_rng, r_rng, c_rng, channel]
 
-    return img_slice
+    tissue_msk_slice = tissue_msk[r_rng, c_rng] if tissue_msk is not None else None
+
+    return img_slice, tissue_msk_slice
 
 
 def adjust_axis_range(img_shape, start, stop, ax, ovlp=0):

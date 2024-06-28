@@ -15,7 +15,7 @@ from skimage.filters import (threshold_li, threshold_niblack,
                              threshold_yen)
 
 
-def create_background_mask(img, method='yen'):
+def create_background_mask(img, method='yen', black_bg=False):
     """
     Compute background mask.
 
@@ -26,6 +26,9 @@ def create_background_mask(img, method='yen'):
 
     method: str
         image thresholding method
+
+    black_bg: bool
+        generate foreground mask
 
     Returns
     -------
@@ -49,7 +52,7 @@ def create_background_mask(img, method='yen'):
         raise ValueError("Unsupported thresholding method!!!")
 
     # compute mask
-    bg_msk = img < thresh
+    bg_msk = img >= thresh if black_bg else img < thresh
 
     return bg_msk
 

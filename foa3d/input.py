@@ -17,7 +17,8 @@ from foa3d.output import create_save_dirs
 from foa3d.preprocessing import config_anisotropy_correction
 from foa3d.printing import (color_text, print_image_shape, print_import_time,
                             print_native_res)
-from foa3d.utils import create_memory_map, get_item_bytes, get_output_prefix
+from foa3d.utils import (create_background_mask, create_memory_map,
+                         get_item_bytes, get_output_prefix)
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
@@ -90,7 +91,9 @@ def get_cli_parser():
                             help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
     cli_parser.add_argument('-o', '--out', type=str, default=None,
                             help='output directory')
-    
+    cli_parser.add_argument('-t', '--tissue-msk', action='store_true', default=False,
+                            help='apply tissue reconstruction mask (binarized MIP)')
+
     # parse arguments
     cli_args = cli_parser.parse_args()
 
@@ -186,6 +189,12 @@ def get_file_info(cli_args):
         create a memory-mapped array of the microscopy volume image,
         increasing the parallel processing performance
         (the image will be preliminarily loaded to RAM)
+
+    mip_msk: bool
+        apply tissue reconstruction mask (binarized MIP)
+
+    ch_mye: int  
+        myelinated fibers channel
     """
 
     # get microscopy image path and name
@@ -202,7 +211,11 @@ def get_file_info(cli_args):
         img_name = img_name.replace('.{}'.format(img_fmt), '')
         is_tiled = True if img_fmt == 'yml' else False
 
-    return img_path, img_name, img_fmt, is_tiled, is_mmap
+    # apply tissue reconstruction mask (binarized MIP)
+    mip_msk = cli_args.tissue_msk
+    ch_mye = cli_args.ch_mye
+
+    return img_path, img_name, img_fmt, is_tiled, is_mmap, mip_msk, ch_mye
 
 
 def get_frangi_config(cli_args, img_name):
@@ -368,6 +381,9 @@ def load_microscopy_image(cli_args):
     img: numpy.ndarray or NumPy memory-map object
         microscopy volume image or array of fiber orientation vectors
 
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
+
     is_tiled: bool
         True for tiled microscopy reconstructions aligned using ZetaStitcher
 
@@ -392,16 +408,18 @@ def load_microscopy_image(cli_args):
     tmp_dir = tempfile.mkdtemp()
 
     # retrieve input file information
-    img_path, img_name, img_fmt, is_tiled, is_mmap = get_file_info(cli_args)
+    img_path, img_name, img_fmt, is_tiled, is_mmap, mip_msk, ch_mye = get_file_info(cli_args)
 
     # import fiber orientation vector data
     tic = perf_counter()
     if img_fmt == 'npy' or img_fmt == 'h5':
         img, is_fiber = load_orient(img_path, img_name, img_fmt)
+        tissue_msk = None
 
     # import raw microscopy volume image
     else:
-        img, is_fiber = load_raw(img_path, img_name, img_fmt, is_tiled=is_tiled, is_mmap=is_mmap, tmp_dir=tmp_dir)
+        img, tissue_msk, is_fiber = load_raw(img_path, img_name, img_fmt, is_tiled=is_tiled, is_mmap=is_mmap,
+                                             tmp_dir=tmp_dir, mip_msk=mip_msk, ch_mye=ch_mye)
 
     # print import time
     print_import_time(tic)
@@ -412,7 +430,7 @@ def load_microscopy_image(cli_args):
     # create saving directory
     save_dir = create_save_dirs(img_path, img_name, cli_args, is_fiber=is_fiber)
 
-    return img, is_tiled, is_fiber, save_dir, tmp_dir, img_name
+    return img, tissue_msk, is_tiled, is_fiber, save_dir, tmp_dir, img_name
 
 
 def load_orient(img_path, img_name, img_fmt):
@@ -460,7 +478,7 @@ def load_orient(img_path, img_name, img_fmt):
         return img, is_fiber
 
 
-def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir=None):
+def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir=None, mip_msk=False, ch_mye=1):
     """
     Load raw microscopy volume image.
 
@@ -486,10 +504,19 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
     tmp_dir: str
         temporary file directory
 
+    mip_msk: bool
+        apply tissue reconstruction mask (binarized MIP)
+
+    ch_mye: int  
+        myelinated fibers channel
+
     Returns
     -------
     img: numpy.ndarray or NumPy memory-map object
         microscopy volume image
+
+    tissue_msk: numpy.ndarray (dtype=bool)
+        tissue reconstruction binary mask
 
     is_fiber: bool
         True when pre-estimated fiber orientation vectors
@@ -519,7 +546,21 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
     if is_mmap:
         img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp_dir=tmp_dir, arr=img[:], mmap_mode='r')
 
+    # compute tissue reconstruction mask (binarized MIP)
+    if mip_msk:
+        dims = len(img.shape)
+        if dims == 3:
+            tissue_mip = np.max(img[:], axis=0)
+        elif dims == 4:
+            img_mye = img[:, ch_mye, :, :] if is_tiled else img[..., ch_mye]
+            tissue_mip = np.max(img_mye, axis=0)
+
+        tissue_msk = create_background_mask(tissue_mip, method='li', black_bg=True)
+
+    else:
+        tissue_msk = None
+
     # raw image
     is_fiber = False
 
-    return img, is_fiber
+    return img, tissue_msk, is_fiber

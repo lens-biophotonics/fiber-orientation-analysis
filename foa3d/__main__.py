@@ -7,7 +7,7 @@ from foa3d.utils import delete_tmp_folder
 def foa3d(cli_args):
 
     # load microscopy volume image or array of fiber orientation vectors
-    img, is_tiled, is_fiber, save_dir, tmp_dir, img_name = load_microscopy_image(cli_args)
+    img, tissue_msk, is_tiled, is_fiber, save_dir, tmp_dir, img_name = load_microscopy_image(cli_args)
 
     # get resources configuration
     ram, jobs = get_resource_config(cli_args)
@@ -15,8 +15,8 @@ def foa3d(cli_args):
     # conduct parallel 3D Frangi-based fiber orientation analysis on batches of basic image slices
     if not is_fiber:
         fiber_vec_img, iso_fiber_img, px_sz, img_name \
-            = parallel_frangi_on_slices(img, cli_args, save_dir[0], tmp_dir, img_name, ram=ram, jobs=jobs,
-                                        is_tiled=is_tiled)
+            = parallel_frangi_on_slices(img, cli_args, save_dir[0], tmp_dir, img_name, tissue_msk=tissue_msk,
+                                        ram=ram, jobs=jobs, is_tiled=is_tiled)
     else:
         fiber_vec_img, iso_fiber_img, px_sz = (img, None, None)
 
