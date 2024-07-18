@@ -437,8 +437,8 @@ def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
         elif bg_img.ndim == 4:
             tmp_slice = 255.0 * np.sum(np.abs(bg_img[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
-            tmp_slice = np.swapaxes(tmp_slice, 0, 1).astype(np.uint8)
 
+        tmp_slice = transform_axes(tmp_slice, swapped=(0, 1), flipped=(0, 1))
         bg_mrtrix_mmap[..., z // vxl_side] = \
             resize(tmp_slice, output_shape=new_shape, anti_aliasing=True, preserve_range=True)
 
