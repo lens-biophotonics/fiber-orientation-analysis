@@ -17,7 +17,7 @@ def analyze_hessian_eigen(img, sigma, trunc=4):
     Parameters
     ----------
     img: numpy.ndarray (axis order=(Z,Y,X))
-        microscopy volume image
+        3D microscopy image
 
     sigma: int
         spatial scale [px]

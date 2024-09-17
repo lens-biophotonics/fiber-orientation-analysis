@@ -14,8 +14,8 @@ from foa3d.output import save_array
 from foa3d.preprocessing import correct_image_anisotropy
 from foa3d.printing import (print_analysis_time, print_frangi_info,
                             print_odf_info)
-from foa3d.slicing import (config_frangi_batch, config_frangi_slicing,
-                           crop_slice, crop_slice_lst, slice_channel)
+from foa3d.slicing import (config_frangi_batch, generate_slice_lists,
+                           crop, crop_lst, slice_image)
 from foa3d.utils import (create_background_mask, create_hdf5_dset,
                          create_memory_map, divide_nonzero,
                          get_available_cores, get_item_size, hsv_orient_cmap,
@@ -289,7 +289,7 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
 
 def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, scales_px, px_rsz_ratio, z_sel,
                    fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, iso_fiber_img, fiber_msk, soma_msk,
-                   tissue_msk=None, ch_lpf=0, ch_mye=1, alpha=0.05, beta=1, gamma=100, dark=False, mask_lpf=False,
+                   ts_msk=None, ch_lpf=0, ch_mye=1, alpha=0.05, beta=1, gamma=100, dark=False, msk_bc=False,
                    hsv_vec_cmap=False, pad_mode='reflect', is_tiled=False, fiber_thresh='li', soma_thresh='yen',
                    mip_thr=0.005):
     """
@@ -401,7 +401,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     """
 
     # slice fiber image slice
-    fiber_slice, tissue_msk_slice = slice_channel(img, rng_in, channel=ch_mye, tissue_msk=tissue_msk, is_tiled=is_tiled)
+    fiber_slice, tissue_msk_slice = slice_image(img, rng_in, ch_mye, ts_msk=ts_msk, is_tiled=is_tiled)
 
     # skip background slice
     crt = np.count_nonzero(tissue_msk_slice) / np.prod(tissue_msk_slice.shape) > mip_thr \
@@ -410,8 +410,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
 
         # preprocess fiber slice
         iso_fiber_slice, rsz_pad, rsz_tissue_msk_slice = \
-            correct_image_anisotropy(fiber_slice, px_rsz_ratio,
-                                     sigma=smooth_sigma, pad=pad, tissue_msk=tissue_msk_slice)
+            correct_image_anisotropy(fiber_slice, px_rsz_ratio, sigma=smooth_sigma, pad=pad, ts_msk=tissue_msk_slice)
 
         # pad fiber slice if required
         if rsz_pad is not None:
@@ -427,8 +426,8 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
 
         # crop resulting slices
         iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice = \
-            crop_slice_lst([iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice],
-                           rng_out, ovlp=ovlp)
+            crop_lst([iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice],
+                             rng_out, ovlp)
 
         # generate fractional anisotropy image
         frac_anis_slice = compute_fractional_anisotropy(eigenval_slice)
@@ -437,21 +436,21 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
         fiber_clr_slice = hsv_orient_cmap(fiber_vec_slice) if hsv_vec_cmap else rgb_orient_cmap(fiber_vec_slice)
 
         # remove background
-        fiber_vec_slice, fiber_clr_slice, fiber_msk_slice = \
-            mask_background(frangi_slice, fiber_vec_slice, fiber_clr_slice,
+        fiber_vec_slice, fiber_clr_slice, frac_anis_slice, fiber_msk_slice = \
+            mask_background(frangi_slice, fiber_vec_slice, fiber_clr_slice, frac_anis_slice,
                             tissue_msk=rsz_tissue_msk_slice, method=fiber_thresh, invert=False)
 
         # (optional) neuronal body masking
-        if mask_lpf:
+        if msk_bc:
 
             # get soma image slice
-            soma_slice = slice_channel(img, rng_in_neu, channel=ch_lpf, is_tiled=is_tiled)
+            soma_slice = slice_image(img, rng_in_neu, ch_lpf, is_tiled=is_tiled)
 
             # resize soma slice (lateral blurring and downsampling)
             iso_soma_slice, _, _ = correct_image_anisotropy(soma_slice, px_rsz_ratio)
 
             # crop isotropized soma slice
-            iso_soma_slice = crop_slice(iso_soma_slice, rng_out)
+            iso_soma_slice = crop(iso_soma_slice, rng_out)
 
             # mask neuronal bodies
             fiber_vec_slice, fiber_clr_slice, frac_anis_slice, soma_msk_slice = \
@@ -598,14 +597,9 @@ def mask_background(img, fiber_vec_slice, fiber_clr_slice,
     # apply mask to input arrays
     fiber_vec_slice[background, :] = 0
     fiber_clr_slice[background, :] = 0
+    frac_anis_slice[background] = 0
 
-    # (optional) mask fractional anisotropy
-    if frac_anis_slice is not None:
-        frac_anis_slice[background] = 0
-        return fiber_vec_slice, fiber_clr_slice, frac_anis_slice, background
-
-    else:
-        return fiber_vec_slice, fiber_clr_slice, background
+    return fiber_vec_slice, fiber_clr_slice, frac_anis_slice, background
 
 
 def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, img_name, odf_scale_um,
@@ -670,8 +664,8 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
                     px_size_iso, save_dir, img_name, odf_scale_um)
 
 
-def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, tissue_msk=None,
-                              ram=None, jobs=4, backend='threading', is_tiled=False, verbose=100):
+def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk=None,
+                              ram=None, jobs=4, backend='threading', is_tiled=False, verbose=10):
     """
     Apply 3D Frangi filtering to basic TPFM image slices using parallel threads.
 
@@ -713,77 +707,61 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, tissue
 
     Returns
     -------
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
-        orientation colormap image
-
-    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
-        fractional anisotropy image
-
-    frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
-        Frangi-enhanced volume image (fiber probability volume)
-
-    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
-    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
-        fiber mask image
+    px_sz_iso: int
+        isotropic pixel size [μm]
 
-    soma_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
-        soma mask image
+    img_name: str
+        name of the input microscopy image
     """
 
     # get Frangi filter configuration
-    alpha, beta, gamma, frangi_sigma_px, frangi_sigma_um, smooth_sigma, px_size, px_size_iso, \
-        z_rng, ch_lpf, ch_mye, mask_lpf, hsv_vec_cmap, img_name = get_frangi_config(cli_args, img_name)
+    alpha, beta, gamma, frangi_sigma, frangi_sigma_um, smooth_sigma, px_sz, px_sz_iso, \
+        z_rng, ch_lpf, ch_mye, msk_bc, hsv_vec_cmap, img_name = get_frangi_config(cli_args, img_name)
 
-    # get info on the input volume image
-    img_shape, img_shape_um, img_item_size, ch_mye, mask_lpf = \
-        get_image_info(img, px_size, mask_lpf, ch_mye, is_tiled=is_tiled)
+    # get info about the input microscopy image
+    img_shp, img_shp_um, img_item_sz, ch_mye, msk_bc = get_image_info(img, px_sz, msk_bc, ch_mye, is_tiled=is_tiled)
 
-    # configure batch of basic image slices analyzed in parallel
-    batch_size, max_slice_size = \
-        config_frangi_batch(frangi_sigma_um, ram=ram, jobs=jobs)
+    # configure the batch of basic image slices analyzed using parallel threads
+    batch_sz, in_slc_shp, in_slc_shp_um, px_rsz_ratio, ovlp, ovlp_rsz = \
+        config_frangi_batch(px_sz, px_sz_iso, img_shp, img_item_sz, smooth_sigma, frangi_sigma_um, ram=ram, jobs=jobs)
 
-    # get info on the processed image slices
-    rng_in_lst, rng_in_lpf_lst, rng_out_lst, pad_lst, \
-        in_slice_shape_um, out_slice_shape, px_rsz_ratio, rsz_ovlp, tot_slice_num, batch_size = \
-        config_frangi_slicing(img_shape, img_item_size, px_size, px_size_iso,
-                              smooth_sigma, frangi_sigma_um, mask_lpf, batch_size, slice_size=max_slice_size)
+    # get info about the processed image slices
+    in_rng_lst, in_pad_lst, out_rng_lst, bc_rng_lst, out_slc_shp, tot_slc_num, batch_sz = \
+        generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp, msk_bg=msk_bc, jobs=jobs)
 
     # initialize output arrays
-    fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_img, \
-        frangi_img, fiber_msk, iso_fiber_img, soma_msk, z_sel = \
-        init_frangi_volumes(img_shape, out_slice_shape, px_rsz_ratio, tmp_dir,
-                            z_rng=z_rng, mask_lpf=mask_lpf, ram=ram)
+    fiber_dset_path, fbr_vec_img, fbr_vec_clr, frac_anis_img, frangi_img, fbr_msk, iso_fbr_img, bc_msk, z_sel = \
+        init_frangi_volumes(img_shp, out_slc_shp, px_rsz_ratio, tmp_dir, z_rng=z_rng, mask_lpf=msk_bc, ram=ram)
 
     # print Frangi filter configuration
-    print_frangi_info(alpha, beta, gamma, frangi_sigma_um, img_shape_um, in_slice_shape_um, tot_slice_num,
-                      px_size, img_item_size, mask_lpf)
+    print_frangi_info(alpha, beta, gamma, frangi_sigma_um, img_shp_um, in_slc_shp_um, tot_slc_num,
+                      px_sz, img_item_sz, msk_bc)
 
-    # parallel Frangi filter-based fiber orientation analysis of microscopy sub-volumes
+    # parallel Frangi filter-based fiber orientation analysis of microscopy image slices
     start_time = perf_counter()
-    with Parallel(n_jobs=batch_size, backend=backend, verbose=verbose, max_nbytes=None) as parallel:
+    with Parallel(n_jobs=batch_sz, backend=backend, verbose=verbose, max_nbytes=None) as parallel:
         parallel(
-            delayed(fiber_analysis)(img,
-                                    rng_in_lst[i], rng_in_lpf_lst[i], rng_out_lst[i], pad_lst[i], rsz_ovlp,
-                                    smooth_sigma, frangi_sigma_px, px_rsz_ratio, z_sel,
-                                    fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img,
-                                    iso_fiber_img, fiber_msk, soma_msk, tissue_msk=tissue_msk,
+            delayed(fiber_analysis)(img, in_rng_lst[i], bc_rng_lst[i], out_rng_lst[i], in_pad_lst[i], ovlp_rsz,
+                                    smooth_sigma, frangi_sigma, px_rsz_ratio, z_sel, fbr_vec_img, fbr_vec_clr,
+                                    frac_anis_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=ts_msk,
                                     ch_lpf=ch_lpf, ch_mye=ch_mye, alpha=alpha, beta=beta, gamma=gamma,
-                                    mask_lpf=mask_lpf, hsv_vec_cmap=hsv_vec_cmap, is_tiled=is_tiled)
-            for i in range(tot_slice_num))
+                                    msk_bc=msk_bc, hsv_vec_cmap=hsv_vec_cmap, is_tiled=is_tiled)
+            for i in range(tot_slc_num))
 
-    # save Frangi output arrays
-    save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, fiber_msk, soma_msk,
-                       px_size_iso, save_dir, img_name)
+    # save output arrays
+    save_frangi_arrays(fiber_dset_path, fbr_vec_img, fbr_vec_clr, frac_anis_img, frangi_img, fbr_msk, bc_msk,
+                       px_sz_iso, save_dir, img_name)
 
     # print Frangi filtering time
     print_analysis_time(start_time)
 
-    return fiber_vec_img, iso_fiber_img, px_size_iso, img_name
+    return fbr_vec_img, iso_fbr_img, px_sz_iso, img_name
 
 
 def parallel_odf_at_scales(fiber_vec_img, iso_fiber_img, cli_args, px_size_iso, save_dir, tmp_dir, img_name,
@@ -893,7 +871,7 @@ def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_
         saving directory string path
 
     img_name: str
-        name of the input microscopy volume image
+        name of the input microscopy image
 
     Returns
     -------

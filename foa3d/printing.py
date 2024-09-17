@@ -113,7 +113,7 @@ def print_analysis_time(start_time):
     None
     """
     _, mins, secs = elapsed_time(start_time)
-    print("\nVolume image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs))
+    print("\nMicroscopy image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs))
 
 
 def print_blur(smooth_sigma_um, psf_fwhm):
@@ -135,7 +135,7 @@ def print_blur(smooth_sigma_um, psf_fwhm):
     """
     print("Gaussian blur \u03C3      [μm]: ({0:.3f}, {1:.3f}, {2:.3f})"
           .format(smooth_sigma_um[0], smooth_sigma_um[1], smooth_sigma_um[2]))
-    print("Adjusted PSF FWHM    [μm]: ({0:.3f}, {0:.3f}, {0:.3f})\n".format(psf_fwhm[0]))
+    print("Adjusted PSF FWHM    [μm]: ({0:.3f}, {0:.3f}, {0:.3f})".format(np.max(psf_fwhm)))
 
 
 def print_import_time(start_time):
@@ -152,7 +152,7 @@ def print_import_time(start_time):
     None
     """
     _, mins, secs = elapsed_time(start_time)
-    print("Volume image loaded in: {0} min {1:3.1f} s".format(mins, secs))
+    print("Image loaded in: {0} min {1:3.1f} s".format(mins, secs))
 
 
 def print_odf_info(odf_scales_um, odf_degrees):
@@ -195,7 +195,7 @@ def print_prepro_heading():
     -------
     None
     """
-    print(color_text(0, 191, 255, "\n\nMicroscopy Volume Image Preprocessing"))
+    print(color_text(0, 191, 255, "\n\nMicroscopy Image Preprocessing"))
     print("\n                              Z      Y      X")
 
 
@@ -299,7 +299,7 @@ def print_soma_masking(lpf_soma_mask):
     -------
     None
     """
-    prt = 'Lipofuscin soma mask: '
+    prt = 'Soma mask: '
     print('{}active\n'.format(prt)) if lpf_soma_mask else print('{}not active\n'.format(prt))
 
 

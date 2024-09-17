@@ -193,7 +193,7 @@ def get_file_info(cli_args):
     mip_msk: bool
         apply tissue reconstruction mask (binarized MIP)
 
-    ch_mye: int  
+    ch_mye: int
         myelinated fibers channel
     """
 
@@ -248,8 +248,7 @@ def get_frangi_config(cli_args, img_name):
         Frangi filter scales [μm]
 
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the low-pass Gaussian filter [px]
-        (applied to the XY plane)
+        3D standard deviation of the smoothing Gaussian filter [px]
 
     px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
@@ -507,7 +506,7 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
     mip_msk: bool
         apply tissue reconstruction mask (binarized MIP)
 
-    ch_mye: int  
+    ch_mye: int
         myelinated fibers channel
 
     Returns
@@ -524,7 +523,7 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
     """
 
     # print heading
-    print(color_text(0, 191, 255, "\nMicroscopy Volume Image Import\n"))
+    print(color_text(0, 191, 255, "\nMicroscopy Image Import\n"))
 
     # load microscopy tiled reconstruction (aligned using ZetaStitcher)
     if is_tiled:

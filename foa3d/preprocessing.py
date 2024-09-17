@@ -35,11 +35,11 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
     """
 
     # set the isotropic pixel resolution equal to the z-sampling step
-    px_sz_iso = px_sz[0] * np.ones(shape=(3,))
+    px_sz_iso = np.max(px_sz) * np.ones(shape=(3,))
 
     # detect preprocessing requirement
     cndt_1 = not np.all(psf_fwhm == psf_fwhm[0])
-    cndt_2 = np.any(px_sz != 1.0)
+    cndt_2 = not np.all(px_sz == px_sz[0])
     smooth_sigma = None
     if cndt_1 or cndt_2:
 
@@ -53,18 +53,17 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
             psf_var = np.square(fwhm_to_sigma(psf_fwhm))
 
             # estimate the in-plane filter variance [μm^2]
-            gauss_var = np.array([0, psf_var[0] - psf_var[1], psf_var[0] - psf_var[2]])
+            gauss_var = np.max(psf_var) - psf_var
 
             # ...and the corresponding standard deviation [px]
-            smooth_sigma = np.divide(np.sqrt(gauss_var), px_sz)
+            smooth_sigma_um = np.sqrt(gauss_var)
+            smooth_sigma = np.divide(smooth_sigma_um, px_sz)
 
             # print preprocessing info
-            smooth_sigma_um = np.multiply(smooth_sigma, px_sz)
             print_blur(smooth_sigma_um, psf_fwhm)
 
         # print pixel resize info
-        if cndt_2:
-            print_new_res(px_sz_iso)
+        print_new_res(px_sz_iso) if cndt_2 else print()
 
     # skip line
     else:
@@ -74,7 +73,7 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
 
 
 def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mode='reflect',
-                             anti_alias=True, trunc=4, tissue_msk=None):
+                             anti_alias=True, trunc=4, ts_msk=None):
     """
     Smooth the input volume image along the X and Y axes so that the lateral
     and longitudinal sizes of the optical system's PSF become equal.
@@ -122,11 +121,11 @@ def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mo
     if np.all(rsz_ratio == 1):
 
         # resize tissue mask, when available
-        if tissue_msk is not None:
-            tissue_msk = tissue_msk[np.newaxis, ...]
+        if ts_msk is not None:
+            tissue_msk = ts_msk[np.newaxis, ...]
             tissue_msk = np.repeat(tissue_msk, img.shape[0], axis=0)
 
-        return img, pad, tissue_msk
+        return img, pad, ts_msk
 
     # lateral blurring
     else:
@@ -145,8 +144,8 @@ def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mo
             if pad is not None else None
 
         # resize tissue mask, when available
-        if tissue_msk is not None:
-            rsz_tissue_msk = resize(tissue_msk, output_shape=tuple(iso_shape[1:]), preserve_range=True)
+        if ts_msk is not None:
+            rsz_tissue_msk = resize(ts_msk, output_shape=tuple(iso_shape[1:]), preserve_range=True)
             rsz_tissue_msk = rsz_tissue_msk[np.newaxis, ...]
             rsz_tissue_msk = np.repeat(rsz_tissue_msk, iso_shape[0], axis=0)
         else:
