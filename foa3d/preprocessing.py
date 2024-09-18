@@ -49,10 +49,10 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
         # adjust PSF anisotropy via lateral Gaussian blurring
         if cndt_1:
 
-            # estimate the PSF variance from input FWHM values [μm^2]
+            # estimate the PSF variance from input FWHM values [μm²]
             psf_var = np.square(fwhm_to_sigma(psf_fwhm))
 
-            # estimate the in-plane filter variance [μm^2]
+            # estimate the in-plane filter variance [μm²]
             gauss_var = np.max(psf_var) - psf_var
 
             # ...and the corresponding standard deviation [px]
@@ -72,23 +72,22 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
     return smooth_sigma, px_sz_iso
 
 
-def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mode='reflect',
+def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, pad_mode='reflect',
                              anti_alias=True, trunc=4, ts_msk=None):
     """
-    Smooth the input volume image along the X and Y axes so that the lateral
-    and longitudinal sizes of the optical system's PSF become equal.
-    Downsample data in the XY plane in order to uniform the 3D pixel size.
+    Smooth and downsample the raw microscopy image so as to uniform the lateral sizes
+    of the optical system's PSF and the original voxel size.
 
     Parameters
     ----------
     img: numpy.ndarray (axis order=(Z,Y,X))
-        microscopy volume image
+        3D microscopy image
 
     rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
         3D resize ratio
 
     sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the low-pass Gaussian filter [px]
+        3D standard deviation of the smoothing Gaussian filter [px]
         (resolution anisotropy correction)
 
     pad: numpy.ndarray (shape=(3,2), dtype=int)
@@ -98,57 +97,57 @@ def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, smooth_pad_mo
         image padding mode adopted for the smoothing Gaussian filter
 
     anti_alias: bool
-        if True, apply an antialiasing filter when downsampling the XY plane
+        if True, apply an antialiasing filter when downsampling
 
     trunc: int
         truncate the Gaussian kernel at this many standard deviations
 
     tissue_msk: numpy.ndarray (dtype=bool)
-        tissue reconstruction binary mask
+        tissue binary mask
 
     Returns
     -------
     iso_img: numpy.ndarray (axis order=(Z,Y,X))
-        isotropic microscopy volume image
+        isotropic microscopy image
 
-    rsz_pad: numpy.ndarray (shape=(3,2), dtype=int)
+    pad_rsz: numpy.ndarray (shape=(3,2), dtype=int)
         resized image padding array
 
-    rsz_tissue_msk: numpy.ndarray (dtype=bool)
-        resized tissue reconstruction binary mask
+    ts_msk_rsz: numpy.ndarray (dtype=bool)
+        resized tissue binary mask
     """
     # no resizing
     if np.all(rsz_ratio == 1):
 
         # resize tissue mask, when available
         if ts_msk is not None:
-            tissue_msk = ts_msk[np.newaxis, ...]
-            tissue_msk = np.repeat(tissue_msk, img.shape[0], axis=0)
+            ts_msk = ts_msk[np.newaxis, ...]
+            ts_msk = np.repeat(ts_msk, img.shape[0], axis=0)
 
         return img, pad, ts_msk
 
     # lateral blurring
     else:
         if sigma is not None:
-            img = gaussian_filter(img, sigma=sigma, mode=smooth_pad_mode, truncate=trunc, output=np.float32)
+            img = gaussian_filter(img, sigma=sigma, mode=pad_mode, truncate=trunc, output=np.float32)
 
         # downsampling
-        iso_shape = np.ceil(np.multiply(np.asarray(img.shape), rsz_ratio)).astype(int)
-        iso_img = np.zeros(shape=iso_shape, dtype=img.dtype)
-        for z in range(iso_shape[0]):
+        iso_shp = np.ceil(np.multiply(np.asarray(img.shape), rsz_ratio)).astype(int)
+        iso_img = np.zeros(shape=iso_shp, dtype=img.dtype)
+        for z in range(iso_shp[0]):
             iso_img[z, ...] = \
-                resize(img[z, ...], output_shape=tuple(iso_shape[1:]), anti_aliasing=anti_alias, preserve_range=True)
+                resize(img[z, ...], output_shape=tuple(iso_shp[1:]), anti_aliasing=anti_alias, preserve_range=True)
 
         # resize padding array accordingly
-        rsz_pad = np.floor(np.multiply(np.array([rsz_ratio, rsz_ratio]).transpose(), pad)).astype(int) \
+        pad_rsz = np.floor(np.multiply(np.array([rsz_ratio, rsz_ratio]).transpose(), pad)).astype(int) \
             if pad is not None else None
 
         # resize tissue mask, when available
         if ts_msk is not None:
-            rsz_tissue_msk = resize(ts_msk, output_shape=tuple(iso_shape[1:]), preserve_range=True)
-            rsz_tissue_msk = rsz_tissue_msk[np.newaxis, ...]
-            rsz_tissue_msk = np.repeat(rsz_tissue_msk, iso_shape[0], axis=0)
+            ts_msk_rsz = resize(ts_msk, output_shape=tuple(iso_shp[1:]), preserve_range=True)
+            ts_msk_rsz = ts_msk_rsz[np.newaxis, ...]
+            ts_msk_rsz = np.repeat(ts_msk_rsz, iso_shp[0], axis=0)
         else:
-            rsz_tissue_msk = None
+            ts_msk_rsz = None
 
-        return iso_img, rsz_pad, rsz_tissue_msk
+        return iso_img, pad_rsz, ts_msk_rsz

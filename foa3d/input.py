@@ -52,7 +52,7 @@ def get_cli_parser():
                     'Scientific Reports, 13, pp. 4160.\n',
         formatter_class=CustomFormatter)
     cli_parser.add_argument(dest='image_path',
-                            help='path to input microscopy volume image or to 4D array of fiber orientation vectors\n'
+                            help='path to input 3D microscopy image or to 4D array of fiber orientation vectors\n'
                                  '* supported formats: .tif (image), '
                                  '.npy (image or fiber vectors), .yml (ZetaStitcher stitch file)\n'
                                  '* image  axes order: (Z, Y, X)\n'
@@ -65,22 +65,20 @@ def get_cli_parser():
                             help='Frangi background score sensitivity')
     cli_parser.add_argument('-s', '--scales', nargs='+', type=float, default=[1.25],
                             help='list of Frangi filter scales [μm]')
-    cli_parser.add_argument('-l', '--lpf-mask', action='store_true', default=False,
-                            help='toggle lipofuscin-based neuronal body masking')
     cli_parser.add_argument('-j', '--jobs', type=int, default=None,
                             help='number of parallel threads used by the Frangi filtering stage: '
                                  'use one thread per logical core if None')
     cli_parser.add_argument('-r', '--ram', type=float, default=None,
                             help='maximum RAM available to the Frangi filtering stage [GB]: use all if None')
     cli_parser.add_argument('-m', '--mmap', action='store_true', default=False,
-                            help='create a memory-mapped array of the microscopy volume image')
+                            help='create a memory-mapped array of the 3D microscopy image')
     cli_parser.add_argument('--px-size-xy', type=float, default=0.878, help='lateral pixel size [μm]')
     cli_parser.add_argument('--px-size-z', type=float, default=1.0, help='longitudinal pixel size [μm]')
     cli_parser.add_argument('--psf-fwhm-x', type=float, default=0.692, help='PSF FWHM along the X axis [μm]')
     cli_parser.add_argument('--psf-fwhm-y', type=float, default=0.692, help='PSF FWHM along the Y axis [μm]')
     cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along the Z axis [μm]')
-    cli_parser.add_argument('--ch-mye', type=int, default=1, help='myelinated fibers channel')
-    cli_parser.add_argument('--ch-lpf', type=int, default=0, help='lipofuscin channel (soma)')
+    cli_parser.add_argument('--fb-ch', type=int, default=1, help='myelinated fibers channel')
+    cli_parser.add_argument('--bc-ch', type=int, default=0, help='neuronal bodies channel')
     cli_parser.add_argument('--z-min', type=float, default=0, help='forced minimum output z-depth [μm]')
     cli_parser.add_argument('--z-max', type=float, default=None, help='forced maximum output z-depth [μm]')
     cli_parser.add_argument('--hsv', action='store_true', default=False,
@@ -91,6 +89,8 @@ def get_cli_parser():
                             help='degrees of the spherical harmonics series expansion (even number between 2 and 10)')
     cli_parser.add_argument('-o', '--out', type=str, default=None,
                             help='output directory')
+    cli_parser.add_argument('-c', '--cell-msk', action='store_true', default=False,
+                            help='toggle optional neuronal body masking')
     cli_parser.add_argument('-t', '--tissue-msk', action='store_true', default=False,
                             help='apply tissue reconstruction mask (binarized MIP)')
 
@@ -100,26 +100,26 @@ def get_cli_parser():
     return cli_args
 
 
-def get_image_info(img, px_sz, mask_lpf, ch_mye, ch_axis=None, is_tiled=False):
+def get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax=None, is_tiled=False):
     """
-    Get information on the input microscopy volume image.
+    Get information on the input 3D microscopy image.
 
     Parameters
     ----------
     img: numpy.ndarray
-        microscopy volume image
+        3D microscopy image
 
     px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
-    mask_lpf: bool
-        if True, mask neuronal bodies exploiting the autofluorescence
-        signal of lipofuscin pigments
+    msk_bc: bool
+        if True, mask neuronal bodies within
+        the optionally provided channel
 
-    ch_mye: int
+    fb_ch: int
         myelinated fibers channel
 
-    ch_axis: int
+    ch_ax: int
         channel axis
 
     is_tiled: bool
@@ -127,39 +127,39 @@ def get_image_info(img, px_sz, mask_lpf, ch_mye, ch_axis=None, is_tiled=False):
 
     Returns
     -------
-    img_shape: numpy.ndarray (shape=(3,), dtype=int)
+    img_shp: numpy.ndarray (shape=(3,), dtype=int)
         volume image shape [px]
 
-    img_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+    img_shp_um: numpy.ndarray (shape=(3,), dtype=float)
         volume image shape [μm]
 
     img_item_sz: int
-        array item size (in bytes)
+        image item size [B]
 
-    ch_mye: int
+    fb_ch: int
         myelinated fibers channel
 
-    mask_lpf: bool
-        if True, mask neuronal bodies exploiting the autofluorescence
-        signal of lipofuscin pigments
+    msk_bc: bool
+        if True, mask neuronal bodies within
+        the optionally provided channel
     """
 
     # adapt channel axis
-    img_shape = np.asarray(img.shape)
-    ndim = len(img_shape)
+    img_shp = np.asarray(img.shape)
+    ndim = len(img_shp)
     if ndim == 4:
-        ch_axis = 1 if is_tiled else -1
+        ch_ax = 1 if is_tiled else -1
     elif ndim == 3:
-        ch_mye = None
-        mask_lpf = False
+        fb_ch = None
+        msk_bc = False
 
-    # get info on microscopy volume image
-    if ch_axis is not None:
-        img_shape = np.delete(img_shape, ch_axis)
-    img_shape_um = np.multiply(img_shape, px_sz)
+    # get info on 3D microscopy image
+    if ch_ax is not None:
+        img_shp = np.delete(img_shp, ch_ax)
+    img_shp_um = np.multiply(img_shp, px_sz)
     img_item_sz = get_item_bytes(img)
 
-    return img_shape, img_shape_um, img_item_sz, ch_mye, mask_lpf
+    return img_shp, img_shp_um, img_item_sz, fb_ch, msk_bc
 
 
 def get_file_info(cli_args):
@@ -174,26 +174,26 @@ def get_file_info(cli_args):
     Returns
     -------
     img_path: str
-        path to the microscopy volume image
+        path to the 3D microscopy image
 
     img_name: str
-        name of the microscopy volume image
+        name of the 3D microscopy image
 
     img_fmt: str
-        format of the microscopy volume image
+        format of the 3D microscopy image
 
     is_tiled: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
     is_mmap: bool
-        create a memory-mapped array of the microscopy volume image,
+        create a memory-mapped array of the 3D microscopy image,
         increasing the parallel processing performance
         (the image will be preliminarily loaded to RAM)
 
     mip_msk: bool
         apply tissue reconstruction mask (binarized MIP)
 
-    ch_mye: int
+    fb_ch: int
         myelinated fibers channel
     """
 
@@ -212,10 +212,10 @@ def get_file_info(cli_args):
         is_tiled = True if img_fmt == 'yml' else False
 
     # apply tissue reconstruction mask (binarized MIP)
-    mip_msk = cli_args.tissue_msk
-    ch_mye = cli_args.ch_mye
+    msk_mip = cli_args.tissue_msk
+    fb_ch = cli_args.fb_ch
 
-    return img_path, img_name, img_fmt, is_tiled, is_mmap, mip_msk, ch_mye
+    return img_path, img_name, img_fmt, is_tiled, is_mmap, msk_mip, fb_ch
 
 
 def get_frangi_config(cli_args, img_name):
@@ -228,7 +228,7 @@ def get_frangi_config(cli_args, img_name):
         populated namespace of command line arguments
 
     img_name: str
-        name of the microscopy volume image
+        name of the 3D microscopy image
 
     Returns
     -------
@@ -259,15 +259,15 @@ def get_frangi_config(cli_args, img_name):
     z_rng: int
         output z-range in [px]
 
-    ch_lpf: int
+    bc_ch: int
         neuronal bodies channel
 
-    ch_mye: int
+    fb_ch: int
         myelinated fibers channel
 
-    mask_lpf: bool
-        if True, mask neuronal bodies exploiting the autofluorescence
-        signal of lipofuscin pigments
+    msk_bc: bool
+        if True, mask neuronal bodies within
+        the optionally provided channel
 
     hsv_vec_cmap: bool
 
@@ -287,9 +287,9 @@ def get_frangi_config(cli_args, img_name):
     scales_px = scales_um / px_sz_iso[0]
 
     # image channels
-    ch_mye = cli_args.ch_mye
-    ch_lpf = cli_args.ch_lpf
-    mask_lpf = cli_args.lpf_mask
+    fb_ch = cli_args.fb_ch
+    bc_ch = cli_args.bc_ch
+    msk_bc = cli_args.cell_msk
 
     # fiber orientation colormap
     hsv_vec_cmap = cli_args.hsv
@@ -304,7 +304,7 @@ def get_frangi_config(cli_args, img_name):
     out_name = '{}img{}'.format(pfx, img_name)
 
     return alpha, beta, gamma, scales_px, scales_um, smooth_sigma, \
-        px_sz, px_sz_iso, z_rng, ch_lpf, ch_mye, mask_lpf, hsv_vec_cmap, out_name
+        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap, out_name
 
 
 def get_resolution(cli_args):
@@ -337,7 +337,7 @@ def get_resolution(cli_args):
 
 def get_resource_config(cli_args):
     """
-    Retrieve resource usage configuration of the Foa3D pipeline.
+    Retrieve resource usage configuration of the Foa3D tool.
 
     Parameters
     ----------
@@ -347,11 +347,11 @@ def get_resource_config(cli_args):
     Returns
     -------
     max_ram: float
-        maximum RAM available to the Frangi filtering stage [B]
+        maximum RAM available to the Frangi filter stage [B]
 
     jobs: int
         number of parallel jobs (threads)
-        used by the Frangi filtering stage
+        used by the Frangi filter stage
     """
 
     # resource parameters (convert maximum RAM to bytes)
@@ -365,7 +365,7 @@ def get_resource_config(cli_args):
 
 def load_microscopy_image(cli_args):
     """
-    Load microscopy volume image from TIFF, NumPy or ZetaStitcher .yml file.
+    Load 3D microscopy image from TIFF, NumPy or ZetaStitcher .yml file.
     Alternatively, the processing pipeline accepts as input NumPy or HDF5
     files of fiber orientation vector data: in this case, the Frangi filter
     stage will be skipped.
@@ -378,7 +378,7 @@ def load_microscopy_image(cli_args):
     Returns
     -------
     img: numpy.ndarray or NumPy memory-map object
-        microscopy volume image or array of fiber orientation vectors
+        3D microscopy image or array of fiber orientation vectors
 
     tissue_msk: numpy.ndarray (dtype=bool)
         tissue reconstruction binary mask
@@ -398,16 +398,13 @@ def load_microscopy_image(cli_args):
 
     img_name: str
         microscopy image filename
-
-    cli_args: see ArgumentParser.parse_args
-        updated namespace of command line arguments
     """
 
     # create temporary directory
     tmp_dir = tempfile.mkdtemp()
 
     # retrieve input file information
-    img_path, img_name, img_fmt, is_tiled, is_mmap, mip_msk, ch_mye = get_file_info(cli_args)
+    img_path, img_name, img_fmt, is_tiled, is_mmap, msk_mip, fb_ch = get_file_info(cli_args)
 
     # import fiber orientation vector data
     tic = perf_counter()
@@ -415,10 +412,10 @@ def load_microscopy_image(cli_args):
         img, is_fiber = load_orient(img_path, img_name, img_fmt)
         tissue_msk = None
 
-    # import raw microscopy volume image
+    # import raw 3D microscopy image
     else:
         img, tissue_msk, is_fiber = load_raw(img_path, img_name, img_fmt, is_tiled=is_tiled, is_mmap=is_mmap,
-                                             tmp_dir=tmp_dir, mip_msk=mip_msk, ch_mye=ch_mye)
+                                             tmp_dir=tmp_dir, msk_mip=msk_mip, fb_ch=fb_ch)
 
     # print import time
     print_import_time(tic)
@@ -439,13 +436,13 @@ def load_orient(img_path, img_name, img_fmt):
     Parameters
     ----------
     img_path: str
-        path to the microscopy volume image
+        path to the 3D microscopy image
 
     img_name: str
-        name of the microscopy volume image
+        name of the 3D microscopy image
 
     img_fmt: str
-        format of the microscopy volume image
+        format of the 3D microscopy image
 
     Returns
     -------
@@ -477,26 +474,26 @@ def load_orient(img_path, img_name, img_fmt):
         return img, is_fiber
 
 
-def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir=None, mip_msk=False, ch_mye=1):
+def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir=None, msk_mip=False, fb_ch=1):
     """
-    Load raw microscopy volume image.
+    Load 3D microscopy image.
 
     Parameters
     ----------
     img_path: str
-        path to the microscopy volume image
+        path to the 3D microscopy image
 
     img_name: str
-        name of the microscopy volume image
+        name of the 3D microscopy image
 
     img_fmt: str
-        format of the microscopy volume image
+        format of the 3D microscopy image
 
     is_tiled: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
     is_mmap: bool
-        create a memory-mapped array of the microscopy volume image,
+        create a memory-mapped array of the 3D microscopy image,
         increasing the parallel processing performance
         (the image will be preliminarily loaded to RAM)
 
@@ -506,13 +503,13 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
     mip_msk: bool
         apply tissue reconstruction mask (binarized MIP)
 
-    ch_mye: int
+    fb_ch: int
         myelinated fibers channel
 
     Returns
     -------
     img: numpy.ndarray or NumPy memory-map object
-        microscopy volume image
+        3D microscopy image
 
     tissue_msk: numpy.ndarray (dtype=bool)
         tissue reconstruction binary mask
@@ -546,12 +543,12 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
         img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp_dir=tmp_dir, arr=img[:], mmap_mode='r')
 
     # compute tissue reconstruction mask (binarized MIP)
-    if mip_msk:
+    if msk_mip:
         dims = len(img.shape)
         if dims == 3:
             tissue_mip = np.max(img[:], axis=0)
         elif dims == 4:
-            img_mye = img[:, ch_mye, :, :] if is_tiled else img[..., ch_mye]
+            img_mye = img[:, fb_ch, :, :] if is_tiled else img[..., fb_ch]
             tissue_mip = np.max(img_mye, axis=0)
 
         tissue_msk = create_background_mask(tissue_mip, method='li', black_bg=True)

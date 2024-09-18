@@ -34,34 +34,33 @@ def compute_fractional_anisotropy(eigenval):
 
     Returns
     -------
-    frac_anis: numpy.ndarray (shape=(3,), dtype=float)
+    fa: numpy.ndarray (shape=(3,), dtype=float)
         fractional anisotropy
     """
 
-    frac_anis = \
-        np.sqrt(0.5 * divide_nonzero(
-                np.square((eigenval[..., 0] - eigenval[..., 1])) +
-                np.square((eigenval[..., 0] - eigenval[..., 2])) +
-                np.square((eigenval[..., 1] - eigenval[..., 2])),
-                np.sum(eigenval ** 2, axis=-1)))
+    fa = np.sqrt(0.5 * divide_nonzero(
+                 np.square((eigenval[..., 0] - eigenval[..., 1])) +
+                 np.square((eigenval[..., 0] - eigenval[..., 2])) +
+                 np.square((eigenval[..., 1] - eigenval[..., 2])),
+                 np.sum(eigenval ** 2, axis=-1)))
 
-    return frac_anis
+    return fa
 
 
-def init_frangi_volumes(img_shape, slice_shape, resize_ratio, tmp_dir, z_rng=(0, None), mask_lpf=False, ram=None):
+def init_frangi_volumes(img_shp, slc_shp, rsz_ratio, tmp_dir, z_rng=(0, None), msk_bc=False, ram=None):
     """
     Initialize the output datasets of the Frangi filtering stage.
 
     Parameters
     ----------
-    img_shape: numpy.ndarray (shape=(3,), dtype=int)
+    img_shp: numpy.ndarray (shape=(3,), dtype=int)
         volume image shape [px]
 
-    slice_shape: numpy.ndarray (shape=(3,), dtype=int)
+    slc_shp: numpy.ndarray (shape=(3,), dtype=int)
         shape of the basic image slices
         analyzed using parallel threads [px]
 
-    resize_ratio: numpy.ndarray (shape=(3,), dtype=float)
+    rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
         3D image resize ratio
 
     tmp_dir: str
@@ -70,38 +69,38 @@ def init_frangi_volumes(img_shape, slice_shape, resize_ratio, tmp_dir, z_rng=(0,
     z_rng: int
         output z-range in [px]
 
-    mask_lpf: bool
-        if True, mask neuronal bodies exploiting the autofluorescence
-        signal of lipofuscin pigments
+    msk_bc: bool
+        if True, mask neuronal bodies
+        in the optionally provided image channel
 
     ram: float
         maximum RAM available to the Frangi filtering stage [B]
 
     Returns
     -------
-    fiber_dset_path: str
+    fbr_dset_path: str
         path to initialized fiber orientation HDF5 dataset
         (not fitting the available RAM)
 
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         initialized fiber orientation volume image
 
-    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
+    fbr_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         initialized orientation colormap image
 
-    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fa_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized fractional anisotropy image
 
     frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized Frangi-enhanced image
 
-    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fbr_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized fiber mask image
 
-    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized fiber image (isotropic resolution)
 
-    soma_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    bc_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         initialized soma mask image
 
     z_sel: NumPy slice object
@@ -109,53 +108,53 @@ def init_frangi_volumes(img_shape, slice_shape, resize_ratio, tmp_dir, z_rng=(0,
     """
 
     # shape copies
-    img_shape = img_shape.copy()
-    slice_shape = slice_shape.copy()
+    img_shp = img_shp.copy()
+    slc_shp = slc_shp.copy()
 
     # adapt output z-axis shape if required
     z_min, z_max = z_rng
     if z_min != 0 or z_max is not None:
         if z_max is None:
-            z_max = slice_shape[0]
-        img_shape[0] = z_max - z_min
+            z_max = slc_shp[0]
+        img_shp[0] = z_max - z_min
     z_sel = slice(z_min, z_max, 1)
 
     # output shape
-    img_dims = len(img_shape)
-    tot_shape = tuple(np.ceil(resize_ratio * img_shape).astype(int))
-    slice_shape[0] = tot_shape[0]
+    img_dims = len(img_shp)
+    tot_shape = tuple(np.ceil(rsz_ratio * img_shp).astype(int))
+    slc_shp[0] = tot_shape[0]
 
     # fiber channel arrays
-    iso_fiber_img, _ = init_volume(tot_shape, dtype='uint8', chunks=slice_shape, name='iso_fiber', tmp=tmp_dir, ram=ram)
-    frangi_img, _ = init_volume(tot_shape, dtype='uint8', chunks=slice_shape, name='frangi', tmp=tmp_dir, ram=ram)
-    fiber_msk, _ = init_volume(tot_shape, dtype='uint8', chunks=slice_shape, name='fiber_msk', tmp=tmp_dir, ram=ram)
-    frac_anis_img, _ = init_volume(tot_shape, dtype='uint8', chunks=slice_shape, name='frac_anis', tmp=tmp_dir, ram=ram)
+    iso_fbr_img, _ = init_volume(tot_shape, dtype='uint8', chunks=slc_shp, name='iso_fiber', tmp=tmp_dir, ram=ram)
+    frangi_img, _ = init_volume(tot_shape, dtype='uint8', chunks=slc_shp, name='frangi', tmp=tmp_dir, ram=ram)
+    fbr_msk, _ = init_volume(tot_shape, dtype='uint8', chunks=slc_shp, name='fbr_msk', tmp=tmp_dir, ram=ram)
+    fa_img, _ = init_volume(tot_shape, dtype='uint8', chunks=slc_shp, name='fa', tmp=tmp_dir, ram=ram)
 
     # soma channel array
-    if mask_lpf:
-        soma_msk, _ = init_volume(tot_shape, dtype='uint8', chunks=slice_shape, name='soma_msk', tmp=tmp_dir, ram=ram)
+    if msk_bc:
+        bc_msk, _ = init_volume(tot_shape, dtype='uint8', chunks=slc_shp, name='bc_msk', tmp=tmp_dir, ram=ram)
     else:
-        soma_msk = None
+        bc_msk = None
 
     # fiber orientation arrays
     vec_shape = tot_shape + (img_dims,)
-    vec_slice_shape = tuple(slice_shape) + (img_dims,)
-    fiber_vec_img, fiber_dset_path = \
+    vec_slice_shape = tuple(slc_shp) + (img_dims,)
+    fbr_vec_img, fbr_dset_path = \
         init_volume(vec_shape, dtype='float32', chunks=vec_slice_shape, name='fiber_vec', tmp=tmp_dir, ram=ram)
-    fiber_vec_clr, _ = \
+    fbr_vec_clr, _ = \
         init_volume(vec_shape, dtype='uint8', chunks=vec_slice_shape, name='fiber_cmap', tmp=tmp_dir, ram=ram)
 
-    return fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_img, \
-        frangi_img, fiber_msk, iso_fiber_img, soma_msk, z_sel
+    return fbr_dset_path, fbr_vec_img, fbr_vec_clr, fa_img, \
+        frangi_img, fbr_msk, iso_fbr_img, bc_msk, z_sel
 
 
-def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6, ram=None):
+def init_odf_volumes(vec_img_shp, tmp_dir, odf_scale, odf_degrees=6, ram=None):
     """
     Initialize the output datasets of the ODF analysis stage.
 
     Parameters
     ----------
-    vec_img_shape: tuple
+    vec_img_shp: tuple
         vector volume shape [px]
 
     tmp_dir: str
@@ -198,37 +197,36 @@ def init_odf_volumes(vec_img_shape, tmp_dir, odf_scale, odf_degrees=6, ram=None)
     """
 
     # ODI maps shape
-    odi_shape = tuple(np.ceil(np.divide(vec_img_shape, odf_scale)).astype(int))
+    odi_shp = tuple(np.ceil(np.divide(vec_img_shp, odf_scale)).astype(int))
 
     # create downsampled background memory map
-    bg_shape = tuple(np.flip(odi_shape))
-    bg_mrtrix, _ = init_volume(bg_shape, dtype='uint8', chunks=tuple(bg_shape[:2]) + (1,),
+    bg_shp = tuple(np.flip(odi_shp))
+    bg_mrtrix, _ = init_volume(bg_shp, dtype='uint8', chunks=tuple(bg_shp[:2]) + (1,),
                                name='bg_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
     # create ODF memory map
-    num_coeff = get_sph_harm_ncoeff(odf_degrees)
-    odf_shape = odi_shape + (num_coeff,)
-    odf, _ = init_volume(odf_shape, dtype='float32', chunks=(1, 1, 1, num_coeff),
+    nc = get_sph_harm_ncoeff(odf_degrees)
+    odf_shp = odi_shp + (nc,)
+    odf, _ = init_volume(odf_shp, dtype='float32', chunks=(1, 1, 1, nc),
                          name='odf_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
     # create orientation tensor memory map
-    vec_tensor_shape = odi_shape + (3,)
-    vec_tensor_eigen, _ = \
-        init_volume(vec_tensor_shape, dtype='float32', chunks=(1, 1, 1, 3),
-                    name='tensor_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
+    vec_tensor_shape = odi_shp + (3,)
+    vec_tensor_eigen, _ = init_volume(vec_tensor_shape, dtype='float32',
+                                      chunks=(1, 1, 1, 3), name='tensor_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
     # create ODI memory maps
-    odi_pri, _ = init_volume(odi_shape, dtype='float32',
+    odi_pri, _ = init_volume(odi_shp, dtype='float32',
                              name='odi_pri_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
-    odi_sec, _ = init_volume(odi_shape, dtype='float32',
+    odi_sec, _ = init_volume(odi_shp, dtype='float32',
                              name='odi_sec_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
-    odi_tot, _ = init_volume(odi_shape, dtype='float32',
+    odi_tot, _ = init_volume(odi_shp, dtype='float32',
                              name='odi_tot_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
-    odi_anis, _ = init_volume(odi_shape, dtype='float32',
+    odi_anis, _ = init_volume(odi_shp, dtype='float32',
                               name='odi_anis_tmp{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
     # create disarray map
-    disarray, _ = init_volume(odi_shape, dtype='float32',
+    disarray, _ = init_volume(odi_shp, dtype='float32',
                               name='disarray{0}'.format(odf_scale), tmp=tmp_dir, ram=ram)
 
     return odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, disarray, vec_tensor_eigen
@@ -287,11 +285,10 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
     return vol, hdf5_path
 
 
-def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, scales_px, px_rsz_ratio, z_sel,
-                   fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, iso_fiber_img, fiber_msk, soma_msk,
-                   ts_msk=None, ch_lpf=0, ch_mye=1, alpha=0.05, beta=1, gamma=100, dark=False, msk_bc=False,
-                   hsv_vec_cmap=False, pad_mode='reflect', is_tiled=False, fiber_thresh='li', soma_thresh='yen',
-                   mip_thr=0.005):
+def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales_px, px_rsz_ratio, z_sel,
+                   fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=None,
+                   bc_ch=0, fb_ch=1, alpha=0.05, beta=1, gamma=100, dark=False, msk_bc=False,
+                   hsv_vec_cmap=False, pad_mode='reflect', is_tiled=False, fb_thr='li', bc_thr='yen', ts_thr=0.005):
     """
     Conduct a Frangi-based fiber orientation analysis on basic slices selected from the whole microscopy volume image.
 
@@ -300,25 +297,23 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     img: numpy.ndarray or NumPy memory-map object (axis order=(Z,Y,X))
         fiber fluorescence volume image
 
-    rng_in: NumPy slice object
+    in_rng: NumPy slice object
         input image range (fibers)
 
-    rng_in_neu: NumPy slice object
+    bc_rng: NumPy slice object
         input image range (neurons)
 
-    rng_out: NumPy slice object
+    out_rng: NumPy slice object
         output range
 
     pad: numpy.ndarray (axis order=(Z,Y,X))
         image padding array
 
-    ovlp: numpy.ndarray (shape=(3,), dtype=int)
-        slice overlap range
-        along each axis side
+    ovlp: int
+        overlapping range between slices along each axis [px]
 
     smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the low-pass Gaussian filter [px]
-        (applied to the XY plane)
+        3D standard deviation of the smoothing Gaussian filter [px]
 
     scales_px: numpy.ndarray (dtype=int)
         spatial scales [px]
@@ -329,34 +324,34 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     z_sel: NumPy slice object
         selected z-depth range
 
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
+    fbr_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fa_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
     frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         Frangi-enhanced volume image (fiber probability volume)
 
-    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
-    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fbr_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    soma_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    bc_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         soma mask image
 
     tissue_msk: numpy.ndarray (dtype=bool)
         tissue reconstruction binary mask
 
-    ch_lpf: int
+    bc_ch: int
         neuronal bodies channel
 
-    ch_mye: int
+    fb_ch: int
         myelinated fibers channel
 
     alpha: float
@@ -376,7 +371,7 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
         if True, generate an HSV orientation color map based on XY-plane orientation angles
         (instead of an RGB map using the cartesian components of the estimated vectors)
 
-    mask_lpf: bool
+    msk_bc: bool
         if True, mask neuronal bodies exploiting the autofluorescence
         signal of lipofuscin pigments
 
@@ -386,14 +381,14 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     is_tiled: bool
         must be True for tiled reconstructions aligned using ZetaStitcher
 
-    fiber_thresh: str
-        enhanced fiber channel thresholding method
+    fb_thr: str
+         thresholding method applied to the myelinated fibers channel
 
-    soma_thresh: str
-        soma channel thresholding method
+    bc_thr: str
+        thresholding method applied to the neuronal bodies channel
 
-    mip_thr: float
-        relative threshold on non-zero tissue MIP pixels
+    ts_thr: float
+        relative threshold on non-zero tissue pixels
 
     Returns
     -------
@@ -401,121 +396,119 @@ def fiber_analysis(img, rng_in, rng_in_neu, rng_out, pad, ovlp, smooth_sigma, sc
     """
 
     # slice fiber image slice
-    fiber_slice, tissue_msk_slice = slice_image(img, rng_in, ch_mye, ts_msk=ts_msk, is_tiled=is_tiled)
+    fbr_slc, ts_msk_slc = slice_image(img, in_rng, fb_ch, ts_msk=ts_msk, is_tiled=is_tiled)
 
     # skip background slice
-    crt = np.count_nonzero(tissue_msk_slice) / np.prod(tissue_msk_slice.shape) > mip_thr \
-        if tissue_msk_slice is not None else np.max(fiber_slice) != 0
+    crt = np.count_nonzero(ts_msk_slc) / np.prod(ts_msk_slc.shape) > ts_thr \
+        if ts_msk_slc is not None else np.max(fbr_slc) != 0
     if crt:
 
         # preprocess fiber slice
-        iso_fiber_slice, rsz_pad, rsz_tissue_msk_slice = \
-            correct_image_anisotropy(fiber_slice, px_rsz_ratio, sigma=smooth_sigma, pad=pad, ts_msk=tissue_msk_slice)
+        iso_fbr_slc, pad_rsz, ts_msk_slc_rsz = \
+            correct_image_anisotropy(fbr_slc, px_rsz_ratio, sigma=smooth_sigma, pad=pad, ts_msk=ts_msk_slc)
 
         # pad fiber slice if required
-        if rsz_pad is not None:
-            iso_fiber_slice = np.pad(iso_fiber_slice, rsz_pad, mode=pad_mode)
+        if pad_rsz is not None:
+            iso_fbr_slc = np.pad(iso_fbr_slc, pad_rsz, mode=pad_mode)
 
             # pad tissue mask if available
-            if rsz_tissue_msk_slice is not None:
-                rsz_tissue_msk_slice = np.pad(rsz_tissue_msk_slice, rsz_pad, mode='constant')
+            if ts_msk_slc_rsz is not None:
+                ts_msk_slc_rsz = np.pad(ts_msk_slc_rsz, pad_rsz, mode='constant')
 
         # 3D Frangi filter
-        frangi_slice, fiber_vec_slice, eigenval_slice = \
-            frangi_filter(iso_fiber_slice, scales_px=scales_px, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+        frangi_slc, fbr_vec_slc, eigenval_slc = \
+            frangi_filter(iso_fbr_slc, scales_px=scales_px, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
         # crop resulting slices
-        iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice = \
-            crop_lst([iso_fiber_slice, frangi_slice, fiber_vec_slice, eigenval_slice, rsz_tissue_msk_slice],
-                             rng_out, ovlp)
+        iso_fbr_slc, frangi_slc, fbr_vec_slc, eigenval_slc, ts_msk_slc_rsz = \
+            crop_lst([iso_fbr_slc, frangi_slc, fbr_vec_slc, eigenval_slc, ts_msk_slc_rsz], out_rng, ovlp)
 
         # generate fractional anisotropy image
-        frac_anis_slice = compute_fractional_anisotropy(eigenval_slice)
+        fa_slc = compute_fractional_anisotropy(eigenval_slc)
 
         # generate fiber orientation color map
-        fiber_clr_slice = hsv_orient_cmap(fiber_vec_slice) if hsv_vec_cmap else rgb_orient_cmap(fiber_vec_slice)
+        fbr_clr_slc = hsv_orient_cmap(fbr_vec_slc) if hsv_vec_cmap else rgb_orient_cmap(fbr_vec_slc)
 
         # remove background
-        fiber_vec_slice, fiber_clr_slice, frac_anis_slice, fiber_msk_slice = \
-            mask_background(frangi_slice, fiber_vec_slice, fiber_clr_slice, frac_anis_slice,
-                            tissue_msk=rsz_tissue_msk_slice, method=fiber_thresh, invert=False)
+        fbr_vec_slc, fbr_clr_slc, fa_slc, fiber_msk_slice = \
+            mask_background(frangi_slc, fbr_vec_slc, fbr_clr_slc, fa_slc,
+                            ts_msk=ts_msk_slc_rsz, method=fb_thr, invert=False)
 
         # (optional) neuronal body masking
         if msk_bc:
 
             # get soma image slice
-            soma_slice = slice_image(img, rng_in_neu, ch_lpf, is_tiled=is_tiled)
+            bc_slc = slice_image(img, bc_rng, bc_ch, is_tiled=is_tiled)
 
             # resize soma slice (lateral blurring and downsampling)
-            iso_soma_slice, _, _ = correct_image_anisotropy(soma_slice, px_rsz_ratio)
+            iso_bc_slc, _, _ = correct_image_anisotropy(bc_slc, px_rsz_ratio)
 
             # crop isotropized soma slice
-            iso_soma_slice = crop(iso_soma_slice, rng_out)
+            iso_bc_slc = crop(iso_bc_slc, out_rng)
 
             # mask neuronal bodies
-            fiber_vec_slice, fiber_clr_slice, frac_anis_slice, soma_msk_slice = \
-                mask_background(iso_soma_slice, fiber_vec_slice, fiber_clr_slice, frac_anis_slice,
-                                method=soma_thresh, invert=True)
+            fbr_vec_slc, fbr_clr_slc, fa_slc, bc_msk_slc = \
+                mask_background(iso_bc_slc, fbr_vec_slc, fbr_clr_slc, fa_slc, method=bc_thr, invert=True)
+
         else:
-            soma_msk_slice = None
+            bc_msk_slc = None
 
         # fill memory-mapped output arrays
-        fill_frangi_volumes(fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, iso_fiber_img, fiber_msk, soma_msk,
-                            fiber_vec_slice, fiber_clr_slice, frac_anis_slice, frangi_slice, iso_fiber_slice,
-                            fiber_msk_slice, soma_msk_slice, rng_out, z_sel)
+        fill_frangi_volumes(fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk,
+                            fbr_vec_slc, fbr_clr_slc, fa_slc, frangi_slc, iso_fbr_slc,
+                            fiber_msk_slice, bc_msk_slc, out_rng, z_sel)
 
 
-def fill_frangi_volumes(fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img, iso_fiber_img, fiber_msk, soma_msk,
-                        fiber_vec_slice, fiber_clr_slice, frac_anis_slice, frangi_slice, iso_fiber_slice,
-                        fiber_msk_slice, soma_msk_slice, rng_out, z_sel):
+def fill_frangi_volumes(fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, fbr_vec_slc,
+                        fbr_clr_slc, fa_slc, frangi_slc, iso_fbr_slc, fbr_msk_slc, bc_msk_slc, out_rng, z_sel):
     """
-    Fill the memory-mapped output arrays of the Frangi filtering stage.
+    Fill the memory-mapped output arrays of the Frangi filter stage.
 
     Parameters
     ----------
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
+    fbr_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fa_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
     frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         Frangi-enhanced image (fiber probability image)
 
-    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
-    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fbr_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    soma_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    bc_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         soma mask image
 
-    fiber_vec_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    fbr_vec_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         fiber orientation vector image slice
 
-    fiber_clr_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+    fbr_clr_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
         orientation colormap image slice
 
-    frac_anis_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         fractional anisotropy image slice
 
-    frangi_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
+    frangi_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
         Frangi-enhanced image slice
 
-    iso_fiber_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image slice
 
-    fiber_msk_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+    fbr_msk_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image slice
 
-    soma_msk_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+    bc_msk_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
         soma mask image slice
 
-    rng_out: tuple
+    out_rng: tuple
         3D slice output index range
 
     z_sel: NumPy slice object
@@ -527,36 +520,35 @@ def fill_frangi_volumes(fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img,
     """
 
     # fill memory-mapped output arrays
-    vec_rng_out = tuple(np.append(rng_out, slice(0, 3, 1)))
-    fiber_vec_img[vec_rng_out] = fiber_vec_slice[z_sel, ...]
-    fiber_vec_clr[vec_rng_out] = fiber_clr_slice[z_sel, ...]
-    iso_fiber_img[rng_out] = iso_fiber_slice[z_sel, ...].astype(np.uint8)
-    frac_anis_img[rng_out] = (255 * frac_anis_slice[z_sel, ...]).astype(np.uint8)
-    frangi_img[rng_out] = (255 * frangi_slice[z_sel, ...]).astype(np.uint8)
-    fiber_msk[rng_out] = (255 * (1 - fiber_msk_slice[z_sel, ...])).astype(np.uint8)
+    vec_rng_out = tuple(np.append(out_rng, slice(0, 3, 1)))
+    fbr_vec_img[vec_rng_out] = fbr_vec_slc[z_sel, ...]
+    fbr_vec_clr[vec_rng_out] = fbr_clr_slc[z_sel, ...]
+    iso_fbr_img[out_rng] = iso_fbr_slc[z_sel, ...].astype(np.uint8)
+    frangi_img[out_rng] = (255 * frangi_slc[z_sel, ...]).astype(np.uint8)
+    fa_img[out_rng] = (255 * fa_slc[z_sel, ...]).astype(np.uint8)
+    fbr_msk[out_rng] = (255 * (1 - fbr_msk_slc[z_sel, ...])).astype(np.uint8)
 
     # fill memory-mapped output soma mask, if available
-    if soma_msk is not None:
-        soma_msk[rng_out] = (255 * soma_msk_slice[z_sel, ...]).astype(np.uint8)
+    if bc_msk is not None:
+        bc_msk[out_rng] = (255 * bc_msk_slc[z_sel, ...]).astype(np.uint8)
 
 
-def mask_background(img, fiber_vec_slice, fiber_clr_slice,
-                    frac_anis_slice=None, method='yen', invert=False, tissue_msk=None):
+def mask_background(img, fbr_vec_slc, fbr_clr_slc, fa_slc=None, method='yen', invert=False, ts_msk=None):
     """
-    Mask orientation volume arrays.
+    Mask fiber orientation arrays.
 
     Parameters
     ----------
     img: numpy.ndarray (axis order=(Z,Y,X))
         fiber (or neuron) fluorescence volume image
 
-    fiber_vec_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    fbr_vec_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         fiber orientation vector slice
 
-    fiber_clr_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
+    fbr_clr_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         fiber orientation colormap slice
 
-    frac_anis_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
+    fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         fractional anisotropy slice
 
     method: str
@@ -565,57 +557,57 @@ def mask_background(img, fiber_vec_slice, fiber_clr_slice,
     invert: bool
         mask inversion flag
 
-    tissue_msk: numpy.ndarray (dtype=bool)
+    ts_msk: numpy.ndarray (dtype=bool)
         tissue reconstruction binary mask
 
     Returns
     -------
-    fiber_vec_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    fbr_vec_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         orientation vector patch (masked)
 
     orientcol_slice: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap patch (masked)
 
-    frac_anis_slice: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
+    fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         fractional anisotropy patch (masked)
 
-    background_mask: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
+    bg: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
         background mask
     """
 
     # generate background mask
-    background = create_background_mask(img, method=method)
+    bg = create_background_mask(img, method=method)
 
     # apply tissue reconstruction mask, when provided
-    if tissue_msk is not None:
-        background = np.logical_or(background, np.logical_not(tissue_msk))
+    if ts_msk is not None:
+        bg = np.logical_or(bg, np.logical_not(ts_msk))
 
     # invert mask
     if invert:
-        background = np.logical_not(background)
+        bg = np.logical_not(bg)
 
     # apply mask to input arrays
-    fiber_vec_slice[background, :] = 0
-    fiber_clr_slice[background, :] = 0
-    frac_anis_slice[background] = 0
+    fbr_vec_slc[bg, :] = 0
+    fbr_clr_slc[bg, :] = 0
+    fa_slc[bg] = 0
 
-    return fiber_vec_slice, fiber_clr_slice, frac_anis_slice, background
+    return fbr_vec_slc, fbr_clr_slc, fa_slc, bg
 
 
-def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, img_name, odf_scale_um,
-                 odf_norm, odf_deg=6, ram=None):
+def odf_analysis(fbr_vec_img, iso_fbr_img, px_sz_iso, save_dir, tmp_dir, img_name, odf_scale_um, odf_norm,
+                 odf_deg=6, ram=None):
     """
     Estimate 3D fiber ODFs from basic orientation data chunks using parallel threads.
 
     Parameters
     ----------
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vectors
 
-    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber volume
 
-    px_size_iso: numpy.ndarray (shape=(3,), dtype=float)
+    px_sz_iso: numpy.ndarray (shape=(3,), dtype=float)
         adjusted isotropic pixel size [μm]
 
     save_dir: str
@@ -645,23 +637,23 @@ def odf_analysis(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, i
     """
 
     # derive the ODF kernel size in [px]
-    odf_scale = int(np.ceil(odf_scale_um / px_size_iso[0]))
+    odf_scale = int(np.ceil(odf_scale_um / px_sz_iso[0]))
 
     # initialize ODF analysis output volumes
     odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, disarray, tensor \
-        = init_odf_volumes(fiber_vec_img.shape[:-1], tmp_dir, odf_scale=odf_scale, odf_degrees=odf_deg, ram=ram)
+        = init_odf_volumes(fbr_vec_img.shape[:-1], tmp_dir, odf_scale=odf_scale, odf_degrees=odf_deg, ram=ram)
 
     # generate downsampled background for MRtrix3 mrview
-    bg_img = fiber_vec_img if iso_fiber_img is None else iso_fiber_img
+    bg_img = fbr_vec_img if iso_fbr_img is None else iso_fbr_img
     generate_odf_background(bg_img, bg_mrtrix, vxl_side=odf_scale)
 
     # compute ODF coefficients
-    odf = compute_odf_map(fiber_vec_img, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, tensor,
+    odf = compute_odf_map(fbr_vec_img, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, tensor,
                           odf_scale, odf_norm, odf_deg=odf_deg)
 
     # save memory maps to file
     save_odf_arrays(odf, bg_mrtrix, odi_pri, odi_sec, odi_tot, odi_anis, disarray,
-                    px_size_iso, save_dir, img_name, odf_scale_um)
+                    px_sz_iso, save_dir, img_name, odf_scale_um)
 
 
 def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk=None,
@@ -722,10 +714,10 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk
 
     # get Frangi filter configuration
     alpha, beta, gamma, frangi_sigma, frangi_sigma_um, smooth_sigma, px_sz, px_sz_iso, \
-        z_rng, ch_lpf, ch_mye, msk_bc, hsv_vec_cmap, img_name = get_frangi_config(cli_args, img_name)
+        z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap, img_name = get_frangi_config(cli_args, img_name)
 
     # get info about the input microscopy image
-    img_shp, img_shp_um, img_item_sz, ch_mye, msk_bc = get_image_info(img, px_sz, msk_bc, ch_mye, is_tiled=is_tiled)
+    img_shp, img_shp_um, img_item_sz, fb_ch, msk_bc = get_image_info(img, px_sz, msk_bc, fb_ch, is_tiled=is_tiled)
 
     # configure the batch of basic image slices analyzed using parallel threads
     batch_sz, in_slc_shp, in_slc_shp_um, px_rsz_ratio, ovlp, ovlp_rsz = \
@@ -733,11 +725,11 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk
 
     # get info about the processed image slices
     in_rng_lst, in_pad_lst, out_rng_lst, bc_rng_lst, out_slc_shp, tot_slc_num, batch_sz = \
-        generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp, msk_bg=msk_bc, jobs=jobs)
+        generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp, msk_bc=msk_bc, jobs=jobs)
 
     # initialize output arrays
-    fiber_dset_path, fbr_vec_img, fbr_vec_clr, frac_anis_img, frangi_img, fbr_msk, iso_fbr_img, bc_msk, z_sel = \
-        init_frangi_volumes(img_shp, out_slc_shp, px_rsz_ratio, tmp_dir, z_rng=z_rng, mask_lpf=msk_bc, ram=ram)
+    fbr_dset_path, fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, fbr_msk, iso_fbr_img, bc_msk, z_sel = \
+        init_frangi_volumes(img_shp, out_slc_shp, px_rsz_ratio, tmp_dir, z_rng=z_rng, msk_bc=msk_bc, ram=ram)
 
     # print Frangi filter configuration
     print_frangi_info(alpha, beta, gamma, frangi_sigma_um, img_shp_um, in_slc_shp_um, tot_slc_num,
@@ -749,14 +741,14 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk
         parallel(
             delayed(fiber_analysis)(img, in_rng_lst[i], bc_rng_lst[i], out_rng_lst[i], in_pad_lst[i], ovlp_rsz,
                                     smooth_sigma, frangi_sigma, px_rsz_ratio, z_sel, fbr_vec_img, fbr_vec_clr,
-                                    frac_anis_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=ts_msk,
-                                    ch_lpf=ch_lpf, ch_mye=ch_mye, alpha=alpha, beta=beta, gamma=gamma,
+                                    fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=ts_msk,
+                                    bc_ch=bc_ch, fb_ch=fb_ch, alpha=alpha, beta=beta, gamma=gamma,
                                     msk_bc=msk_bc, hsv_vec_cmap=hsv_vec_cmap, is_tiled=is_tiled)
             for i in range(tot_slc_num))
 
     # save output arrays
-    save_frangi_arrays(fiber_dset_path, fbr_vec_img, fbr_vec_clr, frac_anis_img, frangi_img, fbr_msk, bc_msk,
-                       px_sz_iso, save_dir, img_name)
+    save_frangi_arrays(fbr_dset_path, fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, fbr_msk, bc_msk, px_sz_iso,
+                       save_dir, img_name)
 
     # print Frangi filtering time
     print_analysis_time(start_time)
@@ -764,7 +756,7 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk
     return fbr_vec_img, iso_fbr_img, px_sz_iso, img_name
 
 
-def parallel_odf_at_scales(fiber_vec_img, iso_fiber_img, cli_args, px_size_iso, save_dir, tmp_dir, img_name,
+def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz_iso, save_dir, tmp_dir, img_name,
                            backend='loky', ram=None, verbose=100):
     """
     Iterate over the required spatial scales and apply the parallel ODF analysis
@@ -772,16 +764,16 @@ def parallel_odf_at_scales(fiber_vec_img, iso_fiber_img, cli_args, px_size_iso, 
 
     Parameters
     ----------
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    iso_fiber_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    iso_fbr_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         isotropic fiber image
 
     cli_args: see ArgumentParser.parse_args
         populated namespace of command line arguments
 
-    px_size_iso: numpy.ndarray (axis order=(3,), dtype=float)
+    px_sz_iso: numpy.ndarray (axis order=(3,), dtype=float)
         adjusted isotropic pixel size [μm]
 
     save_dir: str
@@ -820,14 +812,14 @@ def parallel_odf_at_scales(fiber_vec_img, iso_fiber_img, cli_args, px_size_iso, 
     num_cpu = get_available_cores()
 
     # generate pixel size if not provided
-    if px_size_iso is None:
-        px_size_iso = cli_args.px_size_z * np.ones((3,))
+    if px_sz_iso is None:
+        px_sz_iso = cli_args.px_size_z * np.ones((3,))
 
     # parallel ODF analysis of fiber orientation vectors
     # over the required spatial scales
     n_jobs = min(num_cpu, len(cli_args.odf_res))
     with Parallel(n_jobs=n_jobs, backend=backend, verbose=verbose, max_nbytes=None) as parallel:
-        parallel(delayed(odf_analysis)(fiber_vec_img, iso_fiber_img, px_size_iso, save_dir, tmp_dir, img_name,
+        parallel(delayed(odf_analysis)(fbr_vec_img, iso_fbr_img, px_sz_iso, save_dir, tmp_dir, img_name,
                                        odf_norm=odf_norm, odf_deg=cli_args.odf_deg, odf_scale_um=s, ram=ram)
                  for s in cli_args.odf_res)
 
@@ -835,36 +827,36 @@ def parallel_odf_at_scales(fiber_vec_img, iso_fiber_img, cli_args, px_size_iso, 
     print_analysis_time(start_time)
 
 
-def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_img, frangi_img,
-                       fiber_msk, soma_msk, px_size, save_dir, img_name):
+def save_frangi_arrays(fbr_dset_path, fbr_vec_img, fbr_vec_clr, fa_img, frangi_img,
+                       fbr_msk, bc_msk, px_sz, save_dir, img_name):
     """
     Save the output arrays of the Frangi filter stage to TIF files.
 
     Parameters
     ----------
-    fiber_dset_path: str
+    fbr_dset_path: str
         path to initialized fiber orientation HDF5 dataset
         (not fitting the available RAM)
 
-    fiber_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
         fiber orientation vector image
 
-    fiber_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
+    fbr_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    frac_anis_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fa_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
     frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         Frangi-enhanced volume image (fiber probability)
 
-    fiber_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fbr_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    soma_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    bc_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
         neuron mask image
 
-    px_size: numpy.ndarray (shape=(3,), dtype=float)
+    px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size (Z,Y,X) [μm]
 
     save_dir: str
@@ -879,30 +871,30 @@ def save_frangi_arrays(fiber_dset_path, fiber_vec_img, fiber_vec_clr, frac_anis_
     """
 
     # move large fiber orientation dataset to saving directory
-    if fiber_dset_path is not None:
-        shutil.move(fiber_dset_path, path.join(save_dir, 'fiber_vec_{0}.h5'.format(img_name)))
+    if fbr_dset_path is not None:
+        shutil.move(fbr_dset_path, path.join(save_dir, 'fiber_vec_{0}.h5'.format(img_name)))
     # or save orientation vectors to TIFF
     else:
-        save_array('fiber_vec_{0}'.format(img_name), save_dir, np.moveaxis(fiber_vec_img, -1, 1), px_size)
+        save_array('fiber_vec_{0}'.format(img_name), save_dir, np.moveaxis(fbr_vec_img, -1, 1), px_sz)
 
     # save orientation color map to TIFF
-    save_array('fiber_cmap_{0}'.format(img_name), save_dir, fiber_vec_clr, px_size)
+    save_array('fiber_cmap_{0}'.format(img_name), save_dir, fbr_vec_clr, px_sz)
 
     # save fractional anisotropy map to TIFF
-    save_array('frac_anis_{0}'.format(img_name), save_dir, frac_anis_img, px_size)
+    save_array('frac_anis_{0}'.format(img_name), save_dir, fa_img, px_sz)
 
     # save Frangi-enhanced fiber volume to TIFF
-    save_array('frangi_{0}'.format(img_name), save_dir, frangi_img, px_size)
+    save_array('frangi_{0}'.format(img_name), save_dir, frangi_img, px_sz)
 
     # save masked fiber volume to TIFF
-    save_array('fiber_msk_{0}'.format(img_name), save_dir, fiber_msk, px_size)
+    save_array('fiber_msk_{0}'.format(img_name), save_dir, fbr_msk, px_sz)
 
     # save masked soma volume to TIFF
-    if soma_msk is not None:
-        save_array('soma_msk_{0}'.format(img_name), save_dir, soma_msk, px_size)
+    if bc_msk is not None:
+        save_array('soma_msk_{0}'.format(img_name), save_dir, bc_msk, px_sz)
 
 
-def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_size, save_dir, img_name, odf_scale_um):
+def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_sz, save_dir, img_name, odf_scale_um):
     """
     Save the output arrays of the ODF analysis stage to TIF and Nifti files.
     Arrays tagged with 'mrtrixview' are preliminarily transformed
@@ -931,7 +923,7 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_s
 
     disarray: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
 
-    px_size: numpy.ndarray (shape=(3,), dtype=float)
+    px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size (Z,Y,X) [μm]
 
     save_dir: str
@@ -950,8 +942,8 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_s
     # ODF analysis volumes to Nifti files (adjusted view for MRtrix3)
     save_array('bg_mrtrixview_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, bg, fmt='nii')
     save_array('odf_mrtrixview_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odf, fmt='nii')
-    save_array('odi_pri_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_pri, px_size, odi=True)
-    save_array('odi_sec_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_sec, px_size, odi=True)
-    save_array('odi_tot_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_tot, px_size, odi=True)
-    save_array('odi_anis_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_anis, px_size, odi=True)
-    save_array('disarray_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, disarray, px_size, odi=True)
+    save_array('odi_pri_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_pri, px_sz, odi=True)
+    save_array('odi_sec_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_sec, px_sz, odi=True)
+    save_array('odi_tot_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_tot, px_sz, odi=True)
+    save_array('odi_anis_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, odi_anis, px_sz, odi=True)
+    save_array('disarray_sv{0}_{1}'.format(odf_scale_um, img_name), save_dir, disarray, px_sz, odi=True)

@@ -214,7 +214,7 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
     vesselness = compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha=alpha, beta=beta, gamma=gamma)
 
     # reject vesselness background
-    enhanced_img = reject_vesselness_background(vesselness, eigen2, eigen3, dark)
+    enhanced_img = reject_fiber_background(vesselness, eigen2, eigen3, dark)
 
     # stack eigenvalues list
     eigenval = np.stack(eigenval, axis=-1)
@@ -332,7 +332,7 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
     return enhanced_img, fiber_vec, eigenval
 
 
-def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
+def reject_fiber_background(vesselness, eigen2, eigen3, dark):
     """
     Reject the fiber background, exploiting the sign of the "secondary"
     eigenvalues λ2 and λ3.
