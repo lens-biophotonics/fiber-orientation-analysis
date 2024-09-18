@@ -6,14 +6,14 @@ from skimage.transform import resize
 from foa3d.utils import normalize_image, transform_axes
 
 
-def compute_disarray(fiber_vec):
+def compute_disarray(fbr_vec):
     """
     Compute local angular disarray, i.e. the misalignment degree of nearby orientation vectors
     with respect to the mean direction (Giardini et al., Front. Physiol. 2021).
 
     Parameters
     ----------
-    fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
+    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
         (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
@@ -22,14 +22,14 @@ def compute_disarray(fiber_vec):
     disarray: float32
         local angular disarray
     """
-    fiber_vec = np.delete(fiber_vec, np.all(fiber_vec == 0, axis=-1), axis=0)
-    disarray = (1 - np.linalg.norm(np.mean(fiber_vec, axis=0))).astype(np.float32)
+    fbr_vec = np.delete(fbr_vec, np.all(fbr_vec == 0, axis=-1), axis=0)
+    disarray = (1 - np.linalg.norm(np.mean(fbr_vec, axis=0))).astype(np.float32)
 
     return disarray
 
 
 @njit(cache=True)
-def compute_fiber_angles(fiber_vec, norm):
+def compute_fiber_angles(fbr_vec, norm):
     """
     Estimate the spherical coordinates (φ azimuth and θ polar angles)
     of the fiber orientation vectors returned by the Frangi filtering stage
@@ -37,7 +37,7 @@ def compute_fiber_angles(fiber_vec, norm):
 
     Parameters
     ----------
-    fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
+    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
         (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
@@ -53,14 +53,14 @@ def compute_fiber_angles(fiber_vec, norm):
         fiber polar angle [rad]
     """
 
-    fiber_vec = fiber_vec[norm > 0, :]
-    phi = np.arctan2(fiber_vec[:, 1], fiber_vec[:, 2])
-    theta = np.arccos(fiber_vec[:, 0] / norm[norm > 0])
+    fbr_vec = fbr_vec[norm > 0, :]
+    phi = np.arctan2(fbr_vec[:, 1], fbr_vec[:, 2])
+    theta = np.arccos(fbr_vec[:, 0] / norm[norm > 0])
 
     return phi, theta
 
 
-def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, vec_tensor_eigen, vxl_side, odf_norm,
+def compute_odf_map(fbr_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, vec_tensor_eigen, vxl_side, odf_norm,
                     odf_deg=6, vxl_thr=0.5, vec_thr=0.000001):
     """
     Compute the spherical harmonics coefficients iterating over super-voxels
@@ -68,7 +68,7 @@ def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarra
 
     Parameters
     ----------
-    fiber_vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float)
+    fbr_vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float)
         fiber orientation vectors
 
     odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
@@ -114,18 +114,18 @@ def compute_odf_map(fiber_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarra
     """
 
     # iterate over ODF super-voxels
-    ref_vxl_size = min(vxl_side, fiber_vec.shape[0]) * vxl_side**2
-    for z in range(0, fiber_vec.shape[0], vxl_side):
+    ref_vxl_size = min(vxl_side, fbr_vec.shape[0]) * vxl_side**2
+    for z in range(0, fbr_vec.shape[0], vxl_side):
         zmax = z + vxl_side
 
-        for y in range(0, fiber_vec.shape[1], vxl_side):
+        for y in range(0, fbr_vec.shape[1], vxl_side):
             ymax = y + vxl_side
 
-            for x in range(0, fiber_vec.shape[2], vxl_side):
+            for x in range(0, fbr_vec.shape[2], vxl_side):
                 xmax = x + vxl_side
 
                 # slice orientation voxel
-                vec_vxl = fiber_vec[z:zmax, y:ymax, x:xmax, :]
+                vec_vxl = fbr_vec[z:zmax, y:ymax, x:xmax, :]
                 zerovec = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
 
@@ -259,14 +259,14 @@ def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors
     return real_sph_harm
 
 
-def compute_vec_tensor_eigen(fiber_vec):
+def compute_vec_tensor_eigen(fbr_vec):
     """
     Compute the eigenvalues of the 3x3 orientation tensor
     obtained from a reshaped super-voxel of fiber orientation vectors.
 
     Parameters
     ----------
-    fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
+    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
         fiber orientation vectors
         (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
@@ -276,10 +276,10 @@ def compute_vec_tensor_eigen(fiber_vec):
         orientation tensor eigenvalues in ascending order
     """
 
-    fiber_vec = np.delete(fiber_vec, np.all(fiber_vec == 0, axis=-1), axis=0)
-    fiber_vec.shape = (-1, 3)
+    fbr_vec = np.delete(fbr_vec, np.all(fbr_vec == 0, axis=-1), axis=0)
+    fbr_vec.shape = (-1, 3)
     t = np.zeros((3, 3))
-    for v in fiber_vec:
+    for v in fbr_vec:
         t += np.outer(v, v)
 
     vec_tensor_eigen = sp.linalg.eigh(t, eigvals_only=True).astype(np.float32)
@@ -362,14 +362,14 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
     return real_sph_harm
 
 
-def fiber_vectors_to_sph_harm(fiber_vec, degrees, norm_factors):
+def fiber_vectors_to_sph_harm(fbr_vec, degrees, norm_factors):
     """
     Generate the real-valued symmetric spherical harmonics series expansion
     from the fiber orientation vectors returned by the Frangi filter stage.
 
     Parameters
     ----------
-    fiber_vec: numpy.ndarray (shape=(N,3), dtype=float)
+    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
         array of fiber orientation vectors
         (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
 
@@ -385,14 +385,14 @@ def fiber_vectors_to_sph_harm(fiber_vec, degrees, norm_factors):
         real-valued spherical harmonics coefficients
     """
 
-    fiber_vec.shape = (-1, 3)
+    fbr_vec.shape = (-1, 3)
     ncoeff = get_sph_harm_ncoeff(degrees)
 
-    norm = np.linalg.norm(fiber_vec, axis=-1)
-    if np.sum(norm) < np.sqrt(fiber_vec.shape[0]):
+    norm = np.linalg.norm(fbr_vec, axis=-1)
+    if np.sum(norm) < np.sqrt(fbr_vec.shape[0]):
         return np.zeros(ncoeff)
 
-    phi, theta = compute_fiber_angles(fiber_vec, norm)
+    phi, theta = compute_fiber_angles(fbr_vec, norm)
 
     real_sph_harm = fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff)
 

@@ -387,7 +387,7 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
     return batch_sz, in_slc_shp, in_slc_shp_um, px_rsz_ratio, ovlp, ovlp_rsz
 
 
-def crop(img, rng, ovlp, flip=()):
+def crop(img, rng, ovlp=None, flip=()):
     """
     Shrink image slice at total volume boundaries, for overall shape consistency.
 
@@ -459,7 +459,7 @@ def crop_lst(img_lst, rng, ovlp=None, flip=()):
     return img_lst
 
 
-def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, msk_bg=False, jobs=None):
+def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, msk_bc=False, jobs=None):
     """
     Generate image slice ranges for the Frangi filtering stage.
 
@@ -481,7 +481,7 @@ def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, ms
     ovlp: int
         overlapping range between image slices along each axis [px]
 
-    msk_bg: bool
+    msk_bc: bool
         if True, mask neuronal bodies
         in the optionally provided image channel
 
@@ -540,7 +540,7 @@ def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, ms
         out_rng_lst.append(out_rng)
 
         # (optional) neuronal body channel
-        if msk_bg:
+        if msk_bc:
             bc_rng, _ = compute_slice_range((z, y, x), in_slc_shp, img_shp, slc_per_dim)
             bc_rng_lst.append(bc_rng)
         else:

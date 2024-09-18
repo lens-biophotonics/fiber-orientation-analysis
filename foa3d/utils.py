@@ -38,8 +38,8 @@ def create_background_mask(img, method='yen', black_bg=False):
 
     # select thresholding method
     if method == 'li':
-        initial_li_guess = np.mean(img[img != 0])
-        thresh = threshold_li(img, initial_guess=initial_li_guess)
+        init_li = np.mean(img[img != 0])
+        thresh = threshold_li(img, initial_guess=init_li)
     elif method == 'niblack':
         thresh = threshold_niblack(img, window_size=15, k=0.2)
     elif method == 'sauvola':
@@ -171,7 +171,7 @@ def get_item_size(dtype):
 
     Returns
     -------
-    item_size: int
+    item_sz: int
         item size in bytes
     """
 
@@ -182,17 +182,17 @@ def get_item_size(dtype):
     lst_4 = ['uint64', 'int64', 'float64', np.float64]
 
     if dtype in lst_1:
-        item_size = 1
+        item_sz = 1
     elif dtype in lst_2:
-        item_size = 2
+        item_sz = 2
     elif dtype in lst_3:
-        item_size = 4
+        item_sz = 4
     elif dtype in lst_4:
-        item_size = 8
+        item_sz = 8
     else:
         raise ValueError("Unsupported data type!")
 
-    return item_size
+    return item_sz
 
 
 def delete_tmp_folder(tmp_dir):
@@ -214,7 +214,7 @@ def delete_tmp_folder(tmp_dir):
         pass
 
 
-def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
+def divide_nonzero(nd_array1, nd_array2, new_val=1e-10):
     """
     Divide two arrays handling zero denominator values.
 
@@ -226,7 +226,7 @@ def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
     nd_array2: numpy.ndarray
         divisor array
 
-    new_value: float
+    new_val: float
         substituted value
 
     Returns
@@ -235,9 +235,9 @@ def divide_nonzero(nd_array1, nd_array2, new_value=1e-10):
         divided array
     """
 
-    denominator = np.copy(nd_array2)
-    denominator[denominator == 0] = new_value
-    divided = np.divide(nd_array1, denominator)
+    divisor = np.copy(nd_array2)
+    divisor[divisor == 0] = new_val
+    divided = np.divide(nd_array1, divisor)
 
     return divided
 
@@ -253,10 +253,13 @@ def elapsed_time(start_time):
 
     Returns
     -------
-    total: float
+    tot: float
         total time [s]
 
-    mins: float
+    hrs: int
+        hours
+
+    mins: int
         minutes
 
     secs: float
@@ -264,11 +267,15 @@ def elapsed_time(start_time):
     """
 
     stop_time = perf_counter()
-    total = stop_time - start_time
-    mins = total // 60
-    secs = total % 60
+    tot = stop_time - start_time
 
-    return total, mins, secs
+    secs = tot % 86400
+    hrs = int(secs // 3600)
+    secs %= 3600
+    mins = int(secs // 60)
+    secs %= 60
+
+    return tot, hrs, mins, secs
 
 
 def fwhm_to_sigma(fwhm):

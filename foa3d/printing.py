@@ -39,10 +39,10 @@ def color_text(r, g, b, text):
     return clr_text
 
 
-def print_frangi_info(alpha, beta, gamma, scales_um, image_shape_um, in_slice_shape_um, tot_slice_num,
-                      px_size, image_item_size, lpf_soma_mask):
+def print_frangi_info(alpha, beta, gamma, scales_um, img_shp_um, in_slc_shp_um,
+                      tot_slc_num, px_sz, img_item_sz, msk_bc):
     """
-    Print Frangi filter heading.
+    Print Frangi filter stage heading.
 
     Parameters
     ----------
@@ -58,23 +58,24 @@ def print_frangi_info(alpha, beta, gamma, scales_um, image_shape_um, in_slice_sh
     scales_um: list (dtype=float)
         analyzed spatial scales [μm]
 
-    image_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+    img_shp_um: numpy.ndarray (shape=(3,), dtype=float)
         volume image shape [μm]
 
-    in_slice_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+    in_slc_shp_um: numpy.ndarray (shape=(3,), dtype=float)
         shape of the analyzed image slices [μm]
 
-    tot_slice_num: int
+    tot_slc_num: int
         total number of analyzed image slices
 
-    px_size: numpy.ndarray (shape=(3,), dtype=float)
+    px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
-    image_item_size: int
+    img_item_sz: int
         image item size (in bytes)
 
-    lpf_soma_mask: bool
-        neuronal body masking flag
+    msk_bc: bool
+        if True, mask neuronal bodies within
+        the optionally provided channel
 
     Returns
     -------
@@ -93,15 +94,15 @@ def print_frangi_info(alpha, beta, gamma, scales_um, image_shape_um, in_slice_sh
     print("Enhanced diameters   [\u03BCm]: {}\n".format(4 * scales_um))
 
     # print iterative analysis information
-    print_slicing_info(image_shape_um, in_slice_shape_um, tot_slice_num, px_size, image_item_size)
+    print_slicing_info(img_shp_um, in_slc_shp_um, tot_slc_num, px_sz, img_item_sz)
 
     # print neuron masking info
-    print_soma_masking(lpf_soma_mask)
+    print_soma_masking(msk_bc)
 
 
 def print_analysis_time(start_time):
     """
-    Print volume image analysis time.
+    Print image processing time.
 
     Parameters
     ----------
@@ -112,18 +113,19 @@ def print_analysis_time(start_time):
     -------
     None
     """
-    _, mins, secs = elapsed_time(start_time)
-    print("\nMicroscopy image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs))
+    _, hrs, mins, secs = elapsed_time(start_time)
+    print("\nMicroscopy image analyzed in: {0} min {1:3.1f} s\n".format(mins, secs)) if hrs == 0 else \
+        print("\nMicroscopy image analyzed in: {0} hrs {1} min {2:3.1f} s\n".format(hrs, mins, secs))
 
 
 def print_blur(smooth_sigma_um, psf_fwhm):
     """
-    Print gaussian lowpass filter standard deviation.
+    Print the standard deviation of the smoothing Gaussian filter.
 
     Parameters
     ----------
     smooth_sigma_um: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the low-pass Gaussian filter [μm]
+        3D standard deviation of the smoothing Gaussian filter [μm]
         (resolution anisotropy correction)
 
     psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
@@ -140,7 +142,7 @@ def print_blur(smooth_sigma_um, psf_fwhm):
 
 def print_import_time(start_time):
     """
-    Print volume image import time.
+    Print image import time.
 
     Parameters
     ----------
@@ -151,7 +153,7 @@ def print_import_time(start_time):
     -------
     None
     """
-    _, mins, secs = elapsed_time(start_time)
+    _, _, mins, secs = elapsed_time(start_time)
     print("Image loaded in: {0} min {1:3.1f} s".format(mins, secs))
 
 
@@ -178,7 +180,7 @@ def print_odf_info(odf_scales_um, odf_degrees):
 
 def print_pipeline_heading():
     """
-    Print Foa3D pipeline heading.
+    Print Foa3D tool heading.
 
     Returns
     -------
@@ -199,13 +201,13 @@ def print_prepro_heading():
     print("\n                              Z      Y      X")
 
 
-def print_native_res(px_size, psf_fwhm):
+def print_native_res(px_sz, psf_fwhm):
     """
-    Print pixel and optical resolution of the microscopy system.
+    Print the native pixel size and optical resolution of the microscopy system.
 
     Parameters
     ----------
-    px_size: numpy.ndarray (shape=(3,), dtype=float)
+    px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
     psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
@@ -215,13 +217,13 @@ def print_native_res(px_size, psf_fwhm):
     -------
     None
     """
-    print("Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_size[0], px_size[1], px_size[2]))
+    print("Pixel size           [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(px_sz[0], px_sz[1], px_sz[2]))
     print("PSF FWHM             [μm]: ({0:.3f}, {1:.3f}, {2:.3f})".format(psf_fwhm[0], psf_fwhm[1], psf_fwhm[2]))
 
 
 def print_new_res(px_sz_iso):
     """
-    Print adjusted isotropic spatial resolution.
+    Print the adjusted isotropic spatial resolution.
 
     Parameters
     ----------
@@ -235,26 +237,25 @@ def print_new_res(px_sz_iso):
     print("Adjusted pixel size  [μm]: ({0:.3f}, {1:.3f}, {2:.3f})\n".format(px_sz_iso[0], px_sz_iso[1], px_sz_iso[2]))
 
 
-def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, image_item_size):
+def print_slicing_info(img_shp_um, slc_shp_um, tot_slc_num, px_sz, img_item_sz):
     """
-    Print information on the slicing of the basic image sub-volumes
-    iteratively processed by the Foa3D pipeline.
+    Print information on the slicing of the basic image sub-volumes processed by the Foa3D tool.
 
     Parameters
     ----------
-    image_shape_um: numpy.ndarray (shape=(3,), dtype=float)
-        volume image shape [μm]
+    img_shp_um: numpy.ndarray (shape=(3,), dtype=float)
+        3D microscopy image [μm]
 
-    slice_shape_um: numpy.ndarray (shape=(3,), dtype=float)
+    slc_shp_um: numpy.ndarray (shape=(3,), dtype=float)
         shape of the analyzed image slices [μm]
 
-    tot_slice_num: int
+    tot_slc_num: int
         total number of analyzed image slices
 
-    px_size: numpy.ndarray (shape=(3,), dtype=float)
+    px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
-    image_item_size: int
+    img_item_sz: int
         image item size (in bytes)
 
     Returns
@@ -263,49 +264,45 @@ def print_slicing_info(image_shape_um, slice_shape_um, tot_slice_num, px_size, i
     """
 
     # adjust slice shape
-    if np.any(image_shape_um < slice_shape_um):
-        slice_shape_um = image_shape_um
+    if np.any(img_shp_um < slc_shp_um):
+        slc_shp_um = img_shp_um
 
     # get image memory size
-    image_size = image_item_size * np.prod(np.divide(image_shape_um, px_size))
+    img_sz = img_item_sz * np.prod(np.divide(img_shp_um, px_sz))
 
     # get slice memory size
-    max_slice_size = image_item_size * np.prod(np.divide(slice_shape_um, px_size))
+    max_slc_sz = img_item_sz * np.prod(np.divide(slc_shp_um, px_sz))
 
     # print info
     print("\n                              Z      Y      X")
-    print("Total image shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(image_shape_um[0], image_shape_um[1], image_shape_um[2]))
-    print("Total image size     [MB]: {0}\n"
-          .format(np.ceil(image_size / 1024**2).astype(int)))
-    print("Image slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(slice_shape_um[0], slice_shape_um[1], slice_shape_um[2]))
-    print("Image slice size     [MB]: {0}"
-          .format(np.ceil(max_slice_size / 1024**2).astype(int)))
-    print("Image slice number:        {0}\n"
-          .format(tot_slice_num))
+    print("Total image shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})".format(img_shp_um[0], img_shp_um[1], img_shp_um[2]))
+    print("Total image size     [MB]: {0}\n".format(np.ceil(img_sz / 1024**2).astype(int)))
+    print("Image slice shape    [μm]: ({0:.1f}, {1:.1f}, {2:.1f})".format(slc_shp_um[0], slc_shp_um[1], slc_shp_um[2]))
+    print("Image slice size     [MB]: {0}".format(np.ceil(max_slc_sz / 1024**2).astype(int)))
+    print("Image slice number:        {0}\n".format(tot_slc_num))
 
 
-def print_soma_masking(lpf_soma_mask):
+def print_soma_masking(msk_bc):
     """
-    Print info on lipofuscin-based neuronal body masking.
+    Print information on the optional masking of neuronal bodies.
 
     Parameters
     ----------
-    lpf_soma_mask: bool
-        neuronal body masking flag
+    msk_bc: bool
+        if True, mask neuronal bodies within
+        the optionally provided channel
 
     Returns
     -------
     None
     """
     prt = 'Soma mask: '
-    print('{}active\n'.format(prt)) if lpf_soma_mask else print('{}not active\n'.format(prt))
+    print('{}active\n'.format(prt)) if msk_bc else print('{}not active\n'.format(prt))
 
 
-def print_image_shape(cli_args, img, is_tiled, channel_ax=None):
+def print_image_shape(cli_args, img, is_tiled, ch_ax=None):
     """
-    Print volume image shape.
+    Print 3D microscopy image shape.
 
     Parameters
     ----------
@@ -318,7 +315,7 @@ def print_image_shape(cli_args, img, is_tiled, channel_ax=None):
     is_tiled: bool
         True for tiled reconstructions aligned using ZetaStitcher
 
-    channel_ax: int
+    ch_ax: int
         channel axis (if ndim == 4)
 
     Returns
@@ -327,18 +324,18 @@ def print_image_shape(cli_args, img, is_tiled, channel_ax=None):
     """
 
     # get pixel size
-    px_size_z = cli_args.px_size_z
-    px_size_xy = cli_args.px_size_xy
+    px_sz_z = cli_args.px_size_z
+    px_sz_xy = cli_args.px_size_xy
 
     # adapt axis order
-    img_shape = img.shape
-    if len(img_shape) == 4:
-        channel_ax = 1 if is_tiled else -1
+    img_shp = img.shape
+    if len(img_shp) == 4:
+        ch_ax = 1 if is_tiled else -1
 
     # get image shape
-    if channel_ax is not None:
-        img_shape = np.delete(img_shape, channel_ax)
+    if ch_ax is not None:
+        img_shp = np.delete(img_shp, ch_ax)
 
     print("\n                              Z      Y      X")
     print("Image shape          [μm]: ({0:.1f}, {1:.1f}, {2:.1f})"
-          .format(img_shape[0] * px_size_z, img_shape[1] * px_size_xy, img_shape[2] * px_size_xy))
+          .format(img_shp[0] * px_sz_z, img_shp[1] * px_sz_xy, img_shp[2] * px_sz_xy))
