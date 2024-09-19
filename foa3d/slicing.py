@@ -201,7 +201,7 @@ def compute_overlap(smooth_sigma, frangi_sigma_um, px_rsz_ratio=None, trunc=2):
         resized overlapping range between image slices
         (if px_rsz_ratio is not None) [px]
     """
-    sigma = np.max(frangi_sigma_um) / px_rsz_ratio   
+    sigma = np.max(frangi_sigma_um) / px_rsz_ratio
     if smooth_sigma is not None:
         sigma = np.concatenate((smooth_sigma, sigma))
 
@@ -247,9 +247,11 @@ def compute_slice_shape(img_shp, item_sz, px_sz=None, slc_sz=1e6, ovlp=0):
     if len(img_shp) == 4:
         item_sz *= 3
 
-    side = np.round((slc_sz / item_sz)**(1/3))
-    slc_shp = (side * np.ones((3,)) - 2 * ovlp).astype(np.int64)
-    slc_shp = np.min(np.stack((img_shp[:3], slc_shp)), axis=0)
+    tot_ovlp = 2 * ovlp
+    side_xyz = np.floor((slc_sz / item_sz)**(1/3)).astype(int)
+    side_z = min(img_shp[0] + tot_ovlp, side_xyz)
+    side_xy = np.floor(np.sqrt(np.abs(slc_sz / side_z / item_sz))).astype(int)
+    slc_shp = np.array([side_z, side_xy, side_xy]) - tot_ovlp
     slc_shp_um = np.multiply(slc_shp, px_sz) if px_sz is not None else None
 
     return slc_shp, slc_shp_um
@@ -365,7 +367,7 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
     ns = len(frangi_sigma_um)
 
     # initialize slice batch size
-    batch_sz = np.min([jobs // ns, num_cpu]).astype(int) + 1
+    batch_sz = np.min([jobs, num_cpu]).astype(int) + 1
 
     # get pixel resize ratio
     px_rsz_ratio = np.divide(px_sz, px_sz_iso)
@@ -387,7 +389,7 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
     return batch_sz, in_slc_shp, in_slc_shp_um, px_rsz_ratio, ovlp, ovlp_rsz
 
 
-def crop(img, rng, ovlp, flip=()):
+def crop(img, rng, ovlp=None, flip=()):
     """
     Shrink image slice at total volume boundaries, for overall shape consistency.
 

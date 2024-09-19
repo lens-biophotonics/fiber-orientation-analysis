@@ -127,7 +127,7 @@ def compute_scaled_hessian(img, sigma=1, trunc=4):
     Parameters
     ----------
     img: numpy.ndarray (axis order=(Z,Y,X))
-        microscopy volume image
+        3D microscopy image
 
     sigma: int
         spatial scale [px]
@@ -179,7 +179,7 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
         spatial scale [px]
 
     img: numpy.ndarray (axis order=(Z,Y,X))
-        microscopy volume image
+        3D microscopy image
 
     alpha: float
         plate-like score sensitivity
@@ -196,7 +196,7 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
 
     Returns
     -------
-    enhanced_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
+    frangi_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
     eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
@@ -214,12 +214,12 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
     vesselness = compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha=alpha, beta=beta, gamma=gamma)
 
     # reject vesselness background
-    enhanced_img = reject_fiber_background(vesselness, eigen2, eigen3, dark)
+    frangi_img = reject_fiber_background(vesselness, eigen2, eigen3, dark)
 
     # stack eigenvalues list
     eigenval = np.stack(eigenval, axis=-1)
 
-    return enhanced_img, eigenvec, eigenval
+    return frangi_img, eigenvec, eigenval
 
 
 def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
@@ -263,12 +263,12 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
 
 def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True):
     """
-    Apply 3D Frangi filter to microscopy volume image.
+    Apply 3D Frangi filter to 3D microscopy image.
 
     Parameters
     ----------
     img: numpy.ndarray (axis order=(Z,Y,X))
-        microscopy volume image
+        3D microscopy image
 
     scales_px: int or numpy.ndarray (dtype=int)
         analyzed spatial scales [px]
@@ -288,10 +288,10 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
 
     Returns
     -------
-    enhanced_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
+    frangi_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
-    fiber_vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    fbr_vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         3D fiber orientation map
 
     eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
@@ -301,12 +301,12 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
     # single-scale vesselness analysis
     n_scales = len(scales_px)
     if n_scales == 1:
-        enhanced_img, fiber_vec, eigenval \
+        frangi_img, fbr_vec, eigenval \
             = compute_scaled_orientation(scales_px[0], img, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
 
     # parallel scaled vesselness analysis
     else:
-        with Parallel(n_jobs=n_scales, backend='threading', max_nbytes=None) as parallel:
+        with Parallel(n_jobs=n_scales, prefer='threads', require='sharedmem') as parallel:
             par_res = \
                 parallel(
                     delayed(compute_scaled_orientation)(
@@ -317,19 +317,19 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
             enhanced_img_tpl, eigenvectors_tpl, eigenvalues_tpl = zip(*par_res)
             eigenval = np.stack(eigenvalues_tpl, axis=0)
             eigenvec = np.stack(eigenvectors_tpl, axis=0)
-            enhanced_img = np.stack(enhanced_img_tpl, axis=0)
+            frangi_img = np.stack(enhanced_img_tpl, axis=0)
 
             # get max scale-wise vesselness
-            best_idx = np.argmax(enhanced_img, axis=0)
+            best_idx = np.argmax(frangi_img, axis=0)
             best_idx = np.expand_dims(best_idx, axis=0)
-            enhanced_img = np.take_along_axis(enhanced_img, best_idx, axis=0).squeeze(axis=0)
+            frangi_img = np.take_along_axis(frangi_img, best_idx, axis=0).squeeze(axis=0)
 
             # select fiber orientation vectors (and the associated eigenvalues) among different scales
             best_idx = np.expand_dims(best_idx, axis=-1)
             eigenval = np.take_along_axis(eigenval, best_idx, axis=0).squeeze(axis=0)
-            fiber_vec = np.take_along_axis(eigenvec, best_idx, axis=0).squeeze(axis=0)
+            fbr_vec = np.take_along_axis(eigenvec, best_idx, axis=0).squeeze(axis=0)
 
-    return enhanced_img, fiber_vec, eigenval
+    return frangi_img, fbr_vec, eigenval
 
 
 def reject_fiber_background(vesselness, eigen2, eigen3, dark):

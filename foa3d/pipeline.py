@@ -657,7 +657,7 @@ def odf_analysis(fbr_vec_img, iso_fbr_img, px_sz_iso, save_dir, tmp_dir, img_nam
 
 
 def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk=None,
-                              ram=None, jobs=4, backend='threading', is_tiled=False, verbose=10):
+                              ram=None, jobs=4, backend='threads', is_tiled=False, verbose=10):
     """
     Apply 3D Frangi filtering to basic TPFM image slices using parallel threads.
 
@@ -737,7 +737,7 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk
 
     # parallel Frangi filter-based fiber orientation analysis of microscopy image slices
     start_time = perf_counter()
-    with Parallel(n_jobs=batch_sz, backend=backend, verbose=verbose, max_nbytes=None) as parallel:
+    with Parallel(n_jobs=batch_sz, prefer=backend, verbose=verbose, require='sharedmem') as parallel:
         parallel(
             delayed(fiber_analysis)(img, in_rng_lst[i], bc_rng_lst[i], out_rng_lst[i], in_pad_lst[i], ovlp_rsz,
                                     smooth_sigma, frangi_sigma, px_rsz_ratio, z_sel, fbr_vec_img, fbr_vec_clr,
