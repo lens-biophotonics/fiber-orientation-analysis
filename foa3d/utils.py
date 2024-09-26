@@ -38,8 +38,7 @@ def create_background_mask(img, method='yen', black_bg=False):
 
     # select thresholding method
     if method == 'li':
-        init_li = np.mean(img[img != 0])
-        thresh = threshold_li(img, initial_guess=init_li)
+        thresh = threshold_li(img)
     elif method == 'niblack':
         thresh = threshold_niblack(img, window_size=15, k=0.2)
     elif method == 'sauvola':

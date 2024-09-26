@@ -367,7 +367,7 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
     ns = len(frangi_sigma_um)
 
     # initialize slice batch size
-    batch_sz = np.min([jobs, num_cpu]).astype(int) + 1
+    batch_sz = np.min([jobs // ns, num_cpu]).astype(int) + 1
 
     # get pixel resize ratio
     px_rsz_ratio = np.divide(px_sz, px_sz_iso)

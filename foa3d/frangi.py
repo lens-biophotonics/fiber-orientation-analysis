@@ -107,7 +107,6 @@ def compute_frangi_features(eigen1, eigen2, eigen3, gamma):
         background score sensitivity
         (automatically computed if not provided as input)
     """
-
     ra = divide_nonzero(np.abs(eigen2), np.abs(eigen3))
     rb = divide_nonzero(np.abs(eigen1), np.sqrt(np.abs(np.multiply(eigen2, eigen3))))
     s = compute_structureness(eigen1, eigen2, eigen3)

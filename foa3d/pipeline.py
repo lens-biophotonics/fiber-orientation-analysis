@@ -438,7 +438,7 @@ def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales
         if msk_bc:
 
             # get soma image slice
-            bc_slc = slice_image(img, bc_rng, bc_ch, is_tiled=is_tiled)
+            bc_slc, _ = slice_image(img, bc_rng, bc_ch, is_tiled=is_tiled)
 
             # resize soma slice (lateral blurring and downsampling)
             iso_bc_slc, _, _ = correct_image_anisotropy(bc_slc, px_rsz_ratio)
@@ -756,7 +756,7 @@ def parallel_frangi_on_slices(img, cli_args, save_dir, tmp_dir, img_name, ts_msk
     return fbr_vec_img, iso_fbr_img, px_sz_iso, img_name
 
 
-def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz_iso, save_dir, tmp_dir, img_name,
+def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz, save_dir, tmp_dir, img_name,
                            backend='loky', ram=None, verbose=100):
     """
     Iterate over the required spatial scales and apply the parallel ODF analysis
@@ -773,8 +773,8 @@ def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz_iso, save_d
     cli_args: see ArgumentParser.parse_args
         populated namespace of command line arguments
 
-    px_sz_iso: numpy.ndarray (axis order=(3,), dtype=float)
-        adjusted isotropic pixel size [μm]
+    px_sz: numpy.ndarray (axis order=(3,), dtype=float)
+        pixel size [μm]
 
     save_dir: str
         saving directory string path
@@ -812,14 +812,14 @@ def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz_iso, save_d
     num_cpu = get_available_cores()
 
     # generate pixel size if not provided
-    if px_sz_iso is None:
-        px_sz_iso = cli_args.px_size_z * np.ones((3,))
+    if px_sz is None:
+        px_sz = np.array([cli_args.px_size_z, cli_args.px_size_xy, cli_args.px_size_xy])
 
     # parallel ODF analysis of fiber orientation vectors
     # over the required spatial scales
     n_jobs = min(num_cpu, len(cli_args.odf_res))
     with Parallel(n_jobs=n_jobs, backend=backend, verbose=verbose, max_nbytes=None) as parallel:
-        parallel(delayed(odf_analysis)(fbr_vec_img, iso_fbr_img, px_sz_iso, save_dir, tmp_dir, img_name,
+        parallel(delayed(odf_analysis)(fbr_vec_img, iso_fbr_img, px_sz, save_dir, tmp_dir, img_name,
                                        odf_norm=odf_norm, odf_deg=cli_args.odf_deg, odf_scale_um=s, ram=ram)
                  for s in cli_args.odf_res)
 

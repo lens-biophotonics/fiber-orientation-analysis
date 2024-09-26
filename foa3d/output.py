@@ -6,7 +6,7 @@ import numpy as np
 import tifffile as tiff
 
 
-def create_save_dirs(img_path, img_name, cli_args, is_fiber=False):
+def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
     """
     Create saving directory.
 
@@ -21,7 +21,7 @@ def create_save_dirs(img_path, img_name, cli_args, is_fiber=False):
     cli_args: see ArgumentParser.parse_args
         updated namespace of command line arguments
 
-    is_fiber: bool
+    is_fovec: bool
         True when fiber orientation vectors are provided as input
         to the pipeline
 
@@ -46,7 +46,7 @@ def create_save_dirs(img_path, img_name, cli_args, is_fiber=False):
         makedirs(base_out_dir)
 
     # create Frangi filter output subdirectory
-    if not is_fiber:
+    if not is_fovec:
         frangi_dir = path.join(base_out_dir, 'frangi')
         makedirs(frangi_dir)
         save_dir_lst.append(frangi_dir)
