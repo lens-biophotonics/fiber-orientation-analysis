@@ -104,7 +104,7 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):
         bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
 
         # save array to TIFF file
-        out_name = '{}.{}'.format(fname, fmt)
+        out_name = f'{fname}.{fmt}'
         if odi:
             tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
                          resolution=(1 / px_sz_x, 1 / px_sz_y),

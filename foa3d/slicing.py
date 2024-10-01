@@ -1,7 +1,8 @@
+from itertools import product
+
 import numpy as np
 import psutil
 
-from itertools import product
 from numba import njit
 from foa3d.utils import get_available_cores
 
@@ -558,7 +559,7 @@ def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, ms
     return in_rng_lst, in_pad_lst, out_rng_lst, bc_rng_lst, out_slc_shp, tot_slc_num, batch_sz
 
 
-def slice_image(img, rng, ch, ts_msk=None, is_tiled=False):
+def slice_image(img, rng, ch, ch_ax, ts_msk=None):
     """
     Slice desired channel from input image volume.
 
@@ -573,12 +574,11 @@ def slice_image(img, rng, ch, ts_msk=None, is_tiled=False):
     ch: int
         channel
 
+    ch_ax: int
+        RGB image channel axis (either 1 or 3, or None for grayscale images)
+
     ts_msk: numpy.ndarray (dtype=bool)
         tissue binary mask
-
-    is_tiled: bool
-        True for tiled reconstructions
-        aligned using ZetaStitcher
 
     Returns
     -------
@@ -590,10 +590,12 @@ def slice_image(img, rng, ch, ts_msk=None, is_tiled=False):
     """
     z_rng, r_rng, c_rng = rng
 
-    if ch is None:
+    if ch_ax is None:
         img_slc = img[z_rng, r_rng, c_rng]
+    elif ch_ax == 1:
+        img_slc = img[z_rng, ch, r_rng, c_rng]
     else:
-        img_slc = img[z_rng, ch, r_rng, c_rng] if is_tiled else img[z_rng, r_rng, c_rng, ch]
+        img_slc = img[z_rng, r_rng, c_rng, ch]
 
     ts_msk_slc = ts_msk[r_rng, c_rng] if ts_msk is not None else None
 

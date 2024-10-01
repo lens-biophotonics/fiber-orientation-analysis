@@ -22,7 +22,7 @@ def create_background_mask(img, method='yen', black_bg=False):
     Parameters
     ----------
     img: numpy.ndarray (axis order=(Z,Y,X))
-        microscopy volume image
+        3D microscopy image
 
     method: str
         image thresholding method
@@ -88,7 +88,7 @@ def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
     if tmp is None:
         tmp = tempfile.mkdtemp()
 
-    file_path = path.join(tmp, '{}.h5'.format(name))
+    file_path = path.join(tmp, f'{name}.h5')
     file = File(file_path, 'w')
     dset = file.create_dataset(None, dset_shape, chunks=tuple(chunks), dtype=dtype)
 
@@ -141,6 +141,33 @@ def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mod
     _ = gc.collect()
 
     return mmap
+
+
+def detect_ch_axis(img):
+    """
+    Detect image channel axis.
+
+    Parameters
+    ----------
+    img: numpy.ndarray
+        3D microscopy image
+
+    Returns
+    -------
+    ch_ax: int
+        channel axis (either 1 or 3)
+    """
+    if len(img.shape) < 4:
+        return None
+    else:
+        ch_ax = (np.array(img.shape) == 3).nonzero()[0]
+        ch_ax = ch_ax[np.logical_or(ch_ax == 1, ch_ax == 3)]
+        if len(ch_ax) != 1:
+            raise ValueError("Ambiguous image axes order: could not determine channel axis!")
+        else:
+            ch_ax = ch_ax[0]
+
+            return ch_ax
 
 
 def get_available_cores():
@@ -348,9 +375,9 @@ def get_output_prefix(scales_um, alpha, beta, gamma):
 
     pfx = 'sc'
     for s in scales_um:
-        pfx += '{}_'.format(s)
+        pfx += f'{s}_'
 
-    pfx = 'a{}_b{}_g{}_{}'.format(alpha, beta, gamma, pfx)
+    pfx = f'a{alpha}_b{beta}_g{gamma}_{pfx}'
 
     return pfx
 
@@ -393,7 +420,7 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
 
     # check limits
     if lower >= upper:
-        raise ValueError("Invalid lower and upper limits: (%s, %s)" % (lower, upper))
+        raise ValueError(f"Invalid lower and upper limits: ({lower}, {upper})")
 
     # view
     norm_angle = angle

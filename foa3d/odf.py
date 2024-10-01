@@ -353,7 +353,7 @@ def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
     i = 0
     for n in range(0, degrees + 1, 2):
         for m in range(-n, n + 1, 1):
-            for j, (p, t) in enumerate(zip(phi, theta)):
+            for p, t in zip(phi, theta):
                 real_sph_harm[i] += compute_real_sph_harm(n, m, p, np.sin(t), np.cos(t), norm_factors)
             i += 1
 

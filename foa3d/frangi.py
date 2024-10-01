@@ -306,11 +306,10 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=True
     # parallel scaled vesselness analysis
     else:
         with Parallel(n_jobs=n_scales, prefer='threads', require='sharedmem') as parallel:
-            par_res = \
-                parallel(
-                    delayed(compute_scaled_orientation)(
-                        scales_px[i], img=img,
-                        alpha=alpha, beta=beta, gamma=gamma, dark=dark) for i in range(n_scales))
+            par_res = parallel(
+                        delayed(compute_scaled_orientation)(
+                            scales_px[i], img=img,
+                            alpha=alpha, beta=beta, gamma=gamma, dark=dark) for i in range(n_scales))
 
             # unpack and stack results
             enhanced_img_tpl, eigenvectors_tpl, eigenvalues_tpl = zip(*par_res)

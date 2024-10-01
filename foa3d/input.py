@@ -1,6 +1,7 @@
 import argparse
 import tempfile
 from time import perf_counter
+from os import path
 
 import h5py
 import numpy as np
@@ -11,13 +12,11 @@ try:
 except ImportError:
     pass
 
-from os import path
-
 from foa3d.output import create_save_dirs
 from foa3d.preprocessing import config_anisotropy_correction
-from foa3d.printing import (color_text, print_image_shape, print_import_time,
-                            print_native_res)
-from foa3d.utils import (create_background_mask, create_memory_map,
+from foa3d.printing import (color_text, print_flushed, print_image_shape,
+                            print_import_time, print_native_res)
+from foa3d.utils import (create_background_mask, create_memory_map, detect_ch_axis,
                          get_item_bytes, get_output_prefix)
 
 
@@ -59,8 +58,7 @@ def get_cli_parser():
                                  '  - .npy (fiber orientation vectors)\n'
                                  '* image axes order:\n'
                                  '  - grayscale image:      (Z, Y, X)\n'
-                                 '  - RGB image:            (Z, Y, X, C)\n'
-                                 '  - RGB tiled image:      (Z, C, Y, X)\n'
+                                 '  - RGB image:            (Z, Y, X, C) or (Z, C, Y, X)\n'
                                  '  - NumPy vector image:   (Z, Y, X, C)\n'
                                  '  - HDF5  vector image:   (Z, Y, X, C)\n'
                                  '  - TIFF  vector image:   (Z, C, Y, X)\n')
@@ -109,7 +107,7 @@ def get_cli_parser():
     return cli_args
 
 
-def get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax=None, is_tiled=False):
+def get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax):
     """
     Get information on the input 3D microscopy image.
 
@@ -129,10 +127,7 @@ def get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax=None, is_tiled=False):
         myelinated fibers channel
 
     ch_ax: int
-        channel axis
-
-    is_tiled: bool
-        True for tiled reconstructions aligned using ZetaStitcher
+        RGB image channel axis (either 1 or 3, or None for grayscale images)
 
     Returns
     -------
@@ -155,16 +150,12 @@ def get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax=None, is_tiled=False):
 
     # adapt channel axis
     img_shp = np.asarray(img.shape)
-    ndim = len(img_shp)
-    if ndim == 4:
-        ch_ax = 1 if is_tiled else -1
-    elif ndim == 3:
+    if ch_ax is None:
         fb_ch = None
         msk_bc = False
-
-    # get info on 3D microscopy image
-    if ch_ax is not None:
+    else:
         img_shp = np.delete(img_shp, ch_ax)
+
     img_shp_um = np.multiply(img_shp, px_sz)
     img_item_sz = get_item_bytes(img)
 
@@ -221,7 +212,7 @@ def get_file_info(cli_args):
         raise ValueError('Format must be specified for input volume images!')
     else:
         img_fmt = split_name[-1]
-        img_name = img_name.replace('.{}'.format(img_fmt), '')
+        img_name = img_name.replace(f'.{img_fmt}', '')
         is_tiled = True if img_fmt == 'yml' else False
         is_fovec = cli_args.vec
 
@@ -315,7 +306,7 @@ def get_frangi_config(cli_args, img_name):
 
     # add Frangi filter configuration prefix to output filenames
     pfx = get_output_prefix(scales_um, alpha, beta, gamma)
-    out_name = '{}img{}'.format(pfx, img_name)
+    out_name = f'{pfx}img{img_name}'
 
     return alpha, beta, gamma, scales_px, scales_um, smooth_sigma, \
         px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap, out_name
@@ -394,11 +385,11 @@ def load_microscopy_image(cli_args):
     img: numpy.ndarray or NumPy memory-map object
         3D microscopy image or array of fiber orientation vectors
 
-    tissue_msk: numpy.ndarray (dtype=bool)
+    ts_msk: numpy.ndarray (dtype=bool)
         tissue reconstruction binary mask
 
-    is_tiled: bool
-        True for tiled microscopy reconstructions aligned using ZetaStitcher
+    ch_ax: int
+        RGB image channel axis (either 1 or 3, or None for grayscale images)
 
     is_fovec: bool
         True when pre-estimated fiber orientation vectors
@@ -424,23 +415,26 @@ def load_microscopy_image(cli_args):
     tic = perf_counter()
     if is_fovec:
         img = load_orient(img_path, img_name, img_fmt, is_mmap=is_mmap, tmp_dir=tmp_dir)
-        tissue_msk = None
+        ts_msk = None
 
     # import raw 3D microscopy image
     else:
-        img, tissue_msk = load_raw(img_path, img_name, img_fmt,
-                                   is_tiled=is_tiled, is_mmap=is_mmap, tmp_dir=tmp_dir, msk_mip=msk_mip, fb_ch=fb_ch)
+        img, ts_msk, ch_ax = load_raw(img_path, img_name, img_fmt,
+                                      is_tiled=is_tiled, is_mmap=is_mmap, tmp_dir=tmp_dir, msk_mip=msk_mip, fb_ch=fb_ch)
 
     # print import time
     print_import_time(tic)
 
     # print volume image shape
-    print_image_shape(cli_args, img, is_tiled) if not is_fovec else print()
+    if not is_fovec:
+        print_image_shape(cli_args, img, ch_ax)
+    else:
+        print_flushed()
 
     # create saving directory
     save_dir = create_save_dirs(img_path, img_name, cli_args, is_fovec=is_fovec)
 
-    return img, tissue_msk, is_tiled, is_fovec, save_dir, tmp_dir, img_name
+    return img, ts_msk, ch_ax, is_fovec, save_dir, tmp_dir, img_name
 
 
 def load_orient(img_path, img_name, img_fmt, is_mmap=False, tmp_dir=None):
@@ -473,7 +467,7 @@ def load_orient(img_path, img_name, img_fmt, is_mmap=False, tmp_dir=None):
     """
 
     # print heading
-    print(color_text(0, 191, 255, "\nFiber Orientation Data Import\n"))
+    print_flushed(color_text(0, 191, 255, "\nFiber Orientation Data Import\n"))
 
     # load fiber orientations
     if img_fmt == 'npy':
@@ -482,10 +476,12 @@ def load_orient(img_path, img_name, img_fmt, is_mmap=False, tmp_dir=None):
             img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp_dir=tmp_dir, arr=img, mmap_mode='r')
     elif img_fmt == 'h5':
         img_file = h5py.File(img_path, 'r')
-        img = img_file.get(img_file.keys()[0])
+        img = img_file.get(list(img_file.keys())[0])
     elif img_fmt == 'tif' or img_fmt == 'tiff':
         img = tiff.imread(img_path)
-        img = np.moveaxis(img, 1, -1)
+        ch_ax = detect_ch_axis(img)
+        if ch_ax == 1:
+            img = np.moveaxis(img, 1, -1)
         if is_mmap:
             img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp_dir=tmp_dir, arr=img, mmap_mode='r')
 
@@ -493,7 +489,7 @@ def load_orient(img_path, img_name, img_fmt, is_mmap=False, tmp_dir=None):
     if img.ndim != 4:
         raise ValueError('Invalid 3D fiber orientation dataset (ndim != 4)!')
     else:
-        print("Loading {} orientation dataset...\n".format(img_name))
+        print_flushed(f"Loading {img_path} orientation vector field...\n")
 
         return img
 
@@ -537,19 +533,22 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
 
     ts_msk: numpy.ndarray (dtype=bool)
         tissue reconstruction binary mask
+
+    ch_ax: int
+        RGB image channel axis (either 1 or 3)
     """
 
     # print heading
-    print(color_text(0, 191, 255, "\nMicroscopy Image Import\n"))
+    print_flushed(color_text(0, 191, 255, "\nMicroscopy Image Import\n"))
 
     # load microscopy tiled reconstruction (aligned using ZetaStitcher)
     if is_tiled:
-        print("Loading {} tiled reconstruction...\n".format(img_name))
+        print_flushed(f"Loading {img_path} tiled reconstruction...\n")
         img = VirtualFusedVolume(img_path)
 
     # load microscopy z-stack
     else:
-        print("Loading {} z-stack...\n".format(img_name))
+        print_flushed(f"Loading {img_path} z-stack...\n")
         img_fmt = img_fmt.lower()
         if img_fmt == 'npy':
             img = np.load(img_path)
@@ -562,13 +561,19 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
         if is_mmap:
             img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp_dir=tmp_dir, arr=img, mmap_mode='r')
 
+    # detect channel axis (RGB images)
+    ch_ax = detect_ch_axis(img)
+
     # generate tissue reconstruction mask
     if msk_mip:
         dims = len(img.shape)
+
+        # grayscale image
         if dims == 3:
             img_fbr = img
+        # RGB image
         elif dims == 4:
-            img_fbr = img[:, fb_ch, :, :] if is_tiled else img[..., fb_ch]
+            img_fbr = img[:, fb_ch, :, :] if ch_ax == 1 else img[..., fb_ch]
 
         # compute MIP (naive for loop to minimize the required RAM)
         ts_mip = np.zeros(img_fbr.shape[1:], dtype=img_fbr.dtype)
@@ -580,4 +585,4 @@ def load_raw(img_path, img_name, img_fmt, is_tiled=False, is_mmap=False, tmp_dir
     else:
         ts_msk = None
 
-    return img, ts_msk
+    return img, ts_msk, ch_ax
