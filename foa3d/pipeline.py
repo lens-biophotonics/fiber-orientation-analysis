@@ -721,7 +721,7 @@ def parallel_frangi_on_slices(img, ch_ax, cli_args, save_dir, tmp_dir, img_name,
 
     # get Frangi filter configuration
     alpha, beta, gamma, frangi_sigma, frangi_sigma_um, smooth_sigma, px_sz, px_sz_iso, \
-        z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap, img_name = get_frangi_config(cli_args, img_name)
+        z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap = get_frangi_config(cli_args)
 
     # get info about the input microscopy image
     img_shp, img_shp_um, img_item_sz, fb_ch, msk_bc = get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax)

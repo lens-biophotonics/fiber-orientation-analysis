@@ -17,7 +17,7 @@ from foa3d.preprocessing import config_anisotropy_correction
 from foa3d.printing import (color_text, print_flushed, print_image_shape,
                             print_import_time, print_native_res)
 from foa3d.utils import (create_background_mask, create_memory_map, detect_ch_axis,
-                         get_item_bytes, get_output_prefix)
+                         get_item_bytes, get_config_label)
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
@@ -220,10 +220,14 @@ def get_file_info(cli_args):
     msk_mip = cli_args.tissue_msk
     fb_ch = cli_args.fb_ch
 
+    # get Frangi filter configuration
+    cfg_lbl = get_config_label(cli_args)
+    img_name = f'{img_name}_{cfg_lbl}'
+
     return img_path, img_name, img_fmt, is_tiled, is_fovec, is_mmap, msk_mip, fb_ch
 
 
-def get_frangi_config(cli_args, img_name):
+def get_frangi_config(cli_args):
     """
     Get Frangi filter configuration.
 
@@ -231,9 +235,6 @@ def get_frangi_config(cli_args, img_name):
     ----------
     cli_args: see ArgumentParser.parse_args
         populated namespace of command line arguments
-
-    img_name: str
-        name of the 3D microscopy image
 
     Returns
     -------
@@ -304,12 +305,8 @@ def get_frangi_config(cli_args, img_name):
     z_max = int(np.ceil(cli_args.z_max / px_sz[0])) if cli_args.z_max is not None else cli_args.z_max
     z_rng = (z_min, z_max)
 
-    # add Frangi filter configuration prefix to output filenames
-    pfx = get_output_prefix(scales_um, alpha, beta, gamma)
-    out_name = f'{pfx}img{img_name}'
-
     return alpha, beta, gamma, scales_px, scales_um, smooth_sigma, \
-        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap, out_name
+        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap
 
 
 def get_resolution(cli_args):

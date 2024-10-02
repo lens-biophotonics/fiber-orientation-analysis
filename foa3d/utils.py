@@ -348,38 +348,28 @@ def get_item_bytes(data):
     return bts
 
 
-def get_output_prefix(scales_um, alpha, beta, gamma):
+def get_config_label(cli_args):
     """
     Generate the output filename prefix including
     pipeline configuration information.
 
     Parameters
     ----------
-    scales_um: list (dtype=float)
-        analyzed spatial scales in [μm]
-
-    alpha: float
-        plate-like score sensitivity
-
-    beta: float
-        blob-like score sensitivity
-
-    gamma: float
-        background score sensitivity
+    cli_args: see ArgumentParser.parse_args
+        updated namespace of command line arguments
 
     Returns
     -------
-    pfx: str
-        pipeline configuration prefix
+    cfg_lbl: str
+        Frangi filter configuration label
     """
 
-    pfx = 'sc'
-    for s in scales_um:
-        pfx += f'{s}_'
+    cfg_lbl = '_s'
+    for s in cli_args.scales:
+        cfg_lbl += f'{s}'
+    cfg_lbl = f'a{cli_args.alpha}_b{cli_args.beta}_g{cli_args.gamma}{cfg_lbl}'
 
-    pfx = f'a{alpha}_b{beta}_g{gamma}_{pfx}'
-
-    return pfx
+    return cfg_lbl
 
 
 def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):

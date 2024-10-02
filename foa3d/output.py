@@ -40,7 +40,7 @@ def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
         out_path = path.dirname(img_path)
 
     # create saving directory
-    base_out_dir = path.join(out_path, time_stamp + '_' + img_name)
+    base_out_dir = path.join(out_path, f"Foa3D_{time_stamp}_{img_name}")
     save_dir_lst = list()
     if not path.isdir(base_out_dir):
         makedirs(base_out_dir)
