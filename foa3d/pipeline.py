@@ -290,7 +290,8 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
 def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales_px, px_rsz_ratio, z_sel,
                    fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=None,
                    bc_ch=0, fb_ch=1, ch_ax=None, alpha=0.05, beta=1, gamma=100, dark=False, msk_bc=False,
-                   print_info=None, hsv_vec_cmap=False, pad_mode='reflect', fb_thr='li', bc_thr='yen', ts_thr=0.005):
+                   print_info=None, hsv_vec_cmap=False, pad_mode='reflect', fb_thr='li', bc_thr='yen', ts_thr=0.005,
+                   verbose=10):
     """
     Conduct a Frangi-based fiber orientation analysis on basic slices selected from the whole microscopy volume image.
 
@@ -398,6 +399,9 @@ def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales
     ts_thr: float
         relative threshold on non-zero tissue pixels
 
+    verbose: int
+        verbosity level (print progress every N=verbose image slices)
+
     Returns
     -------
     None
@@ -438,7 +442,7 @@ def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales
         fbr_clr_slc = hsv_orient_cmap(fbr_vec_slc) if hsv_vec_cmap else rgb_orient_cmap(fbr_vec_slc)
 
         # remove background
-        fbr_vec_slc, fbr_clr_slc, fa_slc, fiber_msk_slice = \
+        fbr_vec_slc, fbr_clr_slc, fa_slc, fbr_msk_slc = \
             mask_background(frangi_slc, fbr_vec_slc, fbr_clr_slc, fa_slc,
                             ts_msk=ts_msk_slc_rsz, method=fb_thr, invert=False)
 
@@ -464,12 +468,15 @@ def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales
         # fill memory-mapped output arrays
         fill_frangi_volumes(fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk,
                             fbr_vec_slc, fbr_clr_slc, fa_slc, frangi_slc, iso_fbr_slc,
-                            fiber_msk_slice, bc_msk_slc, out_rng, z_sel)
+                            fbr_msk_slc, bc_msk_slc, out_rng, z_sel)
 
-        # print progress
-        if print_info is not None:
-            global prog_cnt
-            prog_cnt += 1
+    # print progress
+    if print_info is not None:
+        global prog_cnt
+        prog_cnt += 1
+
+        # print only every N=verbose image slices
+        if prog_cnt % verbose == 0:
             start_time, batch_sz, tot_slc_num = print_info
             prog_prc = 100 * prog_cnt / tot_slc_num
             _, hrs, mins, secs = elapsed_time(start_time)

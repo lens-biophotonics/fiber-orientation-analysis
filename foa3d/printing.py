@@ -103,7 +103,7 @@ def print_frangi_info(alpha, beta, gamma, scales_um, img_shp_um, in_slc_shp_um,
         gamma = 'auto'
 
     print_flushed(color_text(0, 191, 255, "\n3D Frangi Filter"))
-    print_flushed(f"\n\u03B1: {alpha:.3f}\n\u03B2: {beta:.3f}\n\u03B3: {gamma}\n")
+    print_flushed(f"\n\u03B1: {alpha:.6f}\n\u03B2: {beta:.6f}\n\u03B3: {gamma}\n")
     print_flushed(f"Enhanced scales      [μm]: {scales_um}")
     print_flushed(f"Enhanced diameters   [μm]: {4 * scales_um}\n")
 
