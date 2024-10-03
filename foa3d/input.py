@@ -84,6 +84,8 @@ def get_cli_parser():
     cli_parser.add_argument('--psf-fwhm-z', type=float, default=2.612, help='PSF FWHM along depth z-axis [μm]')
     cli_parser.add_argument('--fb-ch', type=int, default=1, help='neuronal fibers channel')
     cli_parser.add_argument('--bc-ch', type=int, default=0, help='neuronal bodies channel')
+    cli_parser.add_argument('--fb-thr', default='li', type=str,
+                            help='Frangi filter probability response threshold (t ∈ [0, 1] or skimage.filters method)')
     cli_parser.add_argument('--z-min', type=float, default=0, help='forced minimum output z-depth [μm]')
     cli_parser.add_argument('--z-max', type=float, default=None, help='forced maximum output z-depth [μm]')
     cli_parser.add_argument('--hsv', action='store_true', default=False,
@@ -297,6 +299,9 @@ def get_frangi_config(cli_args):
     bc_ch = cli_args.bc_ch
     msk_bc = cli_args.cell_msk
 
+    # Frangi filter response threshold
+    fb_thr = cli_args.fb_thr
+
     # fiber orientation colormap
     hsv_vec_cmap = cli_args.hsv
 
@@ -306,7 +311,7 @@ def get_frangi_config(cli_args):
     z_rng = (z_min, z_max)
 
     return alpha, beta, gamma, scales_px, scales_um, smooth_sigma, \
-        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap
+        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, fb_thr, msk_bc, hsv_vec_cmap
 
 
 def get_resolution(cli_args):

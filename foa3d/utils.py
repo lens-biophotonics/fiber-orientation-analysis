@@ -48,7 +48,10 @@ def create_background_mask(img, method='yen', black_bg=False):
     elif method == 'yen':
         thresh = threshold_yen(img, nbins=256)
     else:
-        raise ValueError("Unsupported thresholding method!!!")
+        try:
+            thresh = float(method)
+        except Exception as exc:
+            print("Unsupported thresholding method!")
 
     # compute mask
     bg_msk = img >= thresh if black_bg else img < thresh
@@ -367,7 +370,7 @@ def get_config_label(cli_args):
     cfg_lbl = '_s'
     for s in cli_args.scales:
         cfg_lbl += f'{s}'
-    cfg_lbl = f'a{cli_args.alpha}_b{cli_args.beta}_g{cli_args.gamma}{cfg_lbl}'
+    cfg_lbl = f'a{cli_args.alpha}_b{cli_args.beta}_g{cli_args.gamma}_t{cli_args.fb_thr}{cfg_lbl}'
 
     return cfg_lbl
 

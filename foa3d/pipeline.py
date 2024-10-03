@@ -290,7 +290,7 @@ def init_volume(shape, dtype, chunks=True, name='tmp', tmp=None, mmap_mode='r+',
 def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales_px, px_rsz_ratio, z_sel,
                    fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=None,
                    bc_ch=0, fb_ch=1, ch_ax=None, alpha=0.05, beta=1, gamma=100, dark=False, msk_bc=False,
-                   print_info=None, hsv_vec_cmap=False, pad_mode='reflect', fb_thr='li', bc_thr='yen', ts_thr=0.005,
+                   print_info=None, hsv_vec_cmap=False, pad_mode='reflect', fb_thr='li', bc_thr='yen', ts_thr=0.0001,
                    verbose=10):
     """
     Conduct a Frangi-based fiber orientation analysis on basic slices selected from the whole microscopy volume image.
@@ -476,8 +476,8 @@ def fiber_analysis(img, in_rng, bc_rng, out_rng, pad, ovlp, smooth_sigma, scales
         prog_cnt += 1
 
         # print only every N=verbose image slices
-        if prog_cnt % verbose == 0:
-            start_time, batch_sz, tot_slc_num = print_info
+        start_time, batch_sz, tot_slc_num = print_info
+        if prog_cnt % verbose == 0 or prog_cnt == tot_slc_num:
             prog_prc = 100 * prog_cnt / tot_slc_num
             _, hrs, mins, secs = elapsed_time(start_time)
             print_flushed(f"[Parallel(n_jobs={batch_sz})]:\t{prog_cnt}/{tot_slc_num} done\t|\telapsed: {hrs} hrs {mins} min {secs:.1f} s\t{prog_prc:.1f}%")
@@ -728,7 +728,7 @@ def parallel_frangi_on_slices(img, ch_ax, cli_args, save_dir, tmp_dir, img_name,
 
     # get Frangi filter configuration
     alpha, beta, gamma, frangi_sigma, frangi_sigma_um, smooth_sigma, px_sz, px_sz_iso, \
-        z_rng, bc_ch, fb_ch, msk_bc, hsv_vec_cmap = get_frangi_config(cli_args)
+        z_rng, bc_ch, fb_ch, fb_thr, msk_bc, hsv_vec_cmap = get_frangi_config(cli_args)
 
     # get info about the input microscopy image
     img_shp, img_shp_um, img_item_sz, fb_ch, msk_bc = get_image_info(img, px_sz, msk_bc, fb_ch, ch_ax)
@@ -757,8 +757,9 @@ def parallel_frangi_on_slices(img, ch_ax, cli_args, save_dir, tmp_dir, img_name,
             delayed(fiber_analysis)(img, in_rng_lst[i], bc_rng_lst[i], out_rng_lst[i], in_pad_lst[i], ovlp_rsz,
                                     smooth_sigma, frangi_sigma, px_rsz_ratio, z_sel, fbr_vec_img, fbr_vec_clr,
                                     fa_img, frangi_img, iso_fbr_img, fbr_msk, bc_msk, ts_msk=ts_msk, bc_ch=bc_ch,
-                                    fb_ch=fb_ch, ch_ax=ch_ax, alpha=alpha, beta=beta, gamma=gamma, msk_bc=msk_bc,
-                                    hsv_vec_cmap=hsv_vec_cmap, print_info=(start_time, batch_sz, tot_slc_num))
+                                    fb_ch=fb_ch, fb_thr=fb_thr, ch_ax=ch_ax, alpha=alpha, beta=beta, gamma=gamma,
+                                    msk_bc=msk_bc, hsv_vec_cmap=hsv_vec_cmap,
+                                    print_info=(start_time, batch_sz, tot_slc_num))
             for i in range(tot_slc_num))
 
     # save output arrays
