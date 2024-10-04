@@ -50,8 +50,8 @@ def create_background_mask(img, method='yen', black_bg=False):
     else:
         try:
             thresh = float(method)
-        except Exception as exc:
-            print("Unsupported thresholding method!")
+        except ValueError as ve:
+            raise ValueError(f"{ve}\n\n\tUnsupported Frangi filter thresholding method!") from ve
 
     # compute mask
     bg_msk = img >= thresh if black_bg else img < thresh
@@ -93,7 +93,7 @@ def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
 
     file_path = path.join(tmp, f'{name}.h5')
     file = File(file_path, 'w')
-    dset = file.create_dataset(None, dset_shape, chunks=tuple(chunks), dtype=dtype)
+    dset = file.create_dataset(None, dset_shape, chunks=chunks, dtype=dtype)
 
     return dset, file_path
 

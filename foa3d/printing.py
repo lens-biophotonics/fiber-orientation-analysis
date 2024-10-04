@@ -42,7 +42,7 @@ def color_text(r, g, b, text):
 def print_flushed(string_to_print=""):
     """
     Print string and flush output data buffer.
-    
+
     Parameters
     ----------
     string_to_print: str
@@ -192,8 +192,8 @@ def print_prepro_heading():
     -------
     None
     """
-    print_flushed(color_text(0, 191, 255, "\n\nMicroscopy Image Preprocessing\n" + \
-        "\n                              Z      Y      X"))
+    print_flushed(color_text(0, 191, 255, "\n\nMicroscopy Image Preprocessing\n") + \
+        "\n                              Z      Y      X")
 
 
 def print_native_res(px_sz, psf_fwhm):

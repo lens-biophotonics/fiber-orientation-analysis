@@ -1,4 +1,5 @@
 import shutil
+import h5py
 from os import path
 from time import perf_counter
 
@@ -125,6 +126,7 @@ def init_frangi_volumes(img_shp, slc_shp, rsz_ratio, tmp_dir, z_rng=(0, None), m
     img_dims = len(img_shp)
     tot_shp = tuple(np.ceil(rsz_ratio * img_shp).astype(int))
     slc_shp[0] = tot_shp[0]
+    slc_shp = tuple(slc_shp)
 
     # fiber channel arrays
     iso_fbr_img, _ = init_volume(tot_shp, dtype='uint8', chunks=slc_shp, name='iso_fiber', tmp=tmp_dir, ram=ram)
@@ -140,7 +142,7 @@ def init_frangi_volumes(img_shp, slc_shp, rsz_ratio, tmp_dir, z_rng=(0, None), m
 
     # fiber orientation arrays
     vec_shape = tot_shp + (img_dims,)
-    vec_slice_shape = tuple(slc_shp) + (img_dims,)
+    vec_slice_shape = slc_shp + (img_dims,)
     fbr_vec_img, fbr_dset_path = \
         init_volume(vec_shape, dtype='float32', chunks=vec_slice_shape, name='fiber_vec', tmp=tmp_dir, ram=ram)
     fbr_vec_clr, _ = \
@@ -821,6 +823,10 @@ def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz, save_dir, 
     # get number of logical cores
     num_cpu = get_available_cores()
 
+    # force multithreading when processing a HDF5 dataset
+    if isinstance(fbr_vec_img, h5py.Dataset):
+        backend = 'threading'
+
     # generate pixel size if not provided
     if px_sz is None:
         px_sz = np.array([cli_args.px_size_z, cli_args.px_size_xy, cli_args.px_size_xy])
@@ -879,7 +885,7 @@ def save_frangi_arrays(fbr_dset_path, fbr_vec_img, fbr_vec_clr, fa_img, frangi_i
 
     # move large fiber orientation dataset to saving directory
     if fbr_dset_path is not None:
-        shutil.move(fbr_dset_path, path.join(save_dir, f'fiber_vec_{img_name}.h5'))
+        shutil.copy(fbr_dset_path, path.join(save_dir, f'fiber_vec_{img_name}.h5'))
     # or save orientation vectors to TIFF
     else:
         save_array(f'fiber_vec_{img_name}', save_dir, np.moveaxis(fbr_vec_img, -1, 1), px_sz)
