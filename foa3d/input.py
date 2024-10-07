@@ -1,9 +1,8 @@
 import argparse
-import tempfile
+
 from time import perf_counter
 from os import path
 
-import h5py
 import numpy as np
 import tifffile as tiff
 
@@ -59,9 +58,8 @@ def get_cli_parser():
                                  '* image axes order:\n'
                                  '  - grayscale image:      (Z, Y, X)\n'
                                  '  - RGB image:            (Z, Y, X, C) or (Z, C, Y, X)\n'
-                                 '  - NumPy vector image:   (Z, Y, X, C)\n'
-                                 '  - HDF5  vector image:   (Z, Y, X, C)\n'
-                                 '  - TIFF  vector image:   (Z, C, Y, X)\n')
+                                 '  - NumPy vector image:   (Z, Y, X, C) or (Z, C, Y, X)\n'
+                                 '  - TIFF  vector image:   (Z, Y, X, C) or (Z, C, Y, X)')
     cli_parser.add_argument('-a', '--alpha', type=float, default=0.001,
                             help='Frangi\'s plate-like object sensitivity')
     cli_parser.add_argument('-b', '--beta', type=float, default=1.0,
@@ -407,11 +405,11 @@ def load_microscopy_image(cli_args):
         microscopy image filename
     """
 
-    # create temporary directory
-    tmp_dir = tempfile.mkdtemp()
-
     # retrieve input file information
     img_path, img_name, img_fmt, is_tiled, is_fovec, is_mmap, msk_mip, fb_ch = get_file_info(cli_args)
+
+    # create saving directory
+    save_dir, tmp_dir = create_save_dirs(img_path, img_name, cli_args, is_fovec=is_fovec)
 
     # import fiber orientation vector data
     tic = perf_counter()
@@ -432,9 +430,6 @@ def load_microscopy_image(cli_args):
         print_image_shape(cli_args, img, ch_ax)
     else:
         print_flushed()
-
-    # create saving directory
-    save_dir = create_save_dirs(img_path, img_name, cli_args, is_fovec=is_fovec)
 
     return img, ts_msk, ch_ax, is_fovec, save_dir, tmp_dir, img_name
 
@@ -476,9 +471,6 @@ def load_orient(img_path, img_name, img_fmt, is_mmap=False, tmp_dir=None):
         img = np.load(img_path, mmap_mode='r')
         if is_mmap:
             img = create_memory_map(img.shape, dtype=img.dtype, name=img_name, tmp_dir=tmp_dir, arr=img, mmap_mode='r')
-    elif img_fmt == 'h5':
-        img_file = h5py.File(img_path, 'r')
-        img = img_file.get(list(img_file.keys())[0])
     elif img_fmt == 'tif' or img_fmt == 'tiff':
         img = tiff.imread(img_path)
         ch_ax = detect_ch_axis(img)

@@ -1,3 +1,5 @@
+import tempfile
+
 from datetime import datetime
 from os import makedirs, path
 
@@ -29,6 +31,9 @@ def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
     -------
     save_subdirs: list (dtype=str)
         saving subdirectory string paths
+
+    tmp_dir: str
+        temporary directory (for memory-map objects)
     """
 
     # get current time
@@ -61,7 +66,10 @@ def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
     else:
         save_dir_lst.append(None)
 
-    return save_dir_lst
+    # create temporary directory
+    tmp_dir = tempfile.mkdtemp(dir=out_path)
+
+    return save_dir_lst, tmp_dir
 
 
 def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):

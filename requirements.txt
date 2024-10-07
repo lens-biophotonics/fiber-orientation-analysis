@@ -6,8 +6,6 @@
 #
 about-time==3.1.1
     # via alive-progress
-alive-progress==2.4.1
-    # via -r requirements.in
 astropy==5.1
     # via -r requirements.in
 cachetools==5.3.1
@@ -32,8 +30,6 @@ fonttools==4.37.4
     # via matplotlib
 grapheme==0.6.0
     # via alive-progress
-h5py==3.7.0
-    # via -r requirements.in
 humanfriendly==10.0
     # via coloredlogs
 humanize==4.8.0

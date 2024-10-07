@@ -7,7 +7,6 @@ from time import perf_counter
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
-from h5py import File
 from joblib import dump, load
 from matplotlib.colors import hsv_to_rgb
 from skimage.filters import (threshold_li, threshold_niblack,
@@ -59,46 +58,7 @@ def create_background_mask(img, method='yen', black_bg=False):
     return bg_msk
 
 
-def create_hdf5_dset(dset_shape, dtype, chunks=True, name='tmp', tmp=None):
-    """
-    Create HDF5 dataset.
-
-    Parameters
-    ----------
-    dset_shape: tuple (dtype: int)
-        dataset shape
-
-    dtype:
-        data type of the HDF5 dataset
-
-    chunks: tuple (dtype: int) or bool
-        shape of the chunked storage layout (default: auto chunking)
-
-    name: str
-        filename
-
-    tmp: str
-        path to existing temporary saving directory
-
-    Returns
-    -------
-    dset:
-        HDF5 dataset
-
-    file_path: str
-        path to the HDF5 file
-    """
-    if tmp is None:
-        tmp = tempfile.mkdtemp()
-
-    file_path = path.join(tmp, f'{name}.h5')
-    file = File(file_path, 'w')
-    dset = file.create_dataset(None, dset_shape, chunks=chunks, dtype=dtype)
-
-    return dset, file_path
-
-
-def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mode='r+'):
+def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mode='w+'):
     """
     Create a memory-map to an array stored in a binary file on disk.
 
@@ -133,15 +93,17 @@ def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mod
     mmap_path = path.join(tmp_dir, name + '.mmap')
 
     if path.exists(mmap_path):
-        unlink(mmap_path)
+        unlink(mmap_path)   
 
     if arr is None:
-        arr = np.zeros(tuple(shape), dtype=dtype)
-
-    _ = dump(arr, mmap_path)
-    mmap = load(mmap_path, mmap_mode=mmap_mode)
-    del arr
-    _ = gc.collect()
+        _ = open(mmap_path, mode='w+')
+        mmap = np.memmap(mmap_path, dtype=dtype, mode=mmap_mode, shape=shape)
+        mmap[:] = 0
+    else:
+        _ = dump(arr, mmap_path)
+        mmap = load(mmap_path, mmap_mode=mmap_mode)
+        del arr
+        _ = gc.collect()
 
     return mmap
 
@@ -187,41 +149,6 @@ def get_available_cores():
     num_cpu = cpu_count() if num_cpu is None else int(num_cpu)
 
     return num_cpu
-
-
-def get_item_size(dtype):
-    """
-    Get the item size in bytes of a data type.
-
-    Parameters
-    ----------
-    dtype: str
-        data type identifier
-
-    Returns
-    -------
-    item_sz: int
-        item size in bytes
-    """
-
-    # data type lists
-    lst_1 = ['uint8', 'int8']
-    lst_2 = ['uint16', 'int16', 'float16', np.float16]
-    lst_3 = ['uint32', 'int32', 'float32', np.float32]
-    lst_4 = ['uint64', 'int64', 'float64', np.float64]
-
-    if dtype in lst_1:
-        item_sz = 1
-    elif dtype in lst_2:
-        item_sz = 2
-    elif dtype in lst_3:
-        item_sz = 4
-    elif dtype in lst_4:
-        item_sz = 8
-    else:
-        raise ValueError("Unsupported data type!")
-
-    return item_sz
 
 
 def delete_tmp_folder(tmp_dir):
