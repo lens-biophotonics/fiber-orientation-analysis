@@ -1,3 +1,5 @@
+import psutil
+import shutil
 import tempfile
 
 from datetime import datetime
@@ -6,6 +8,8 @@ from os import makedirs, path
 import nibabel as nib
 import numpy as np
 import tifffile as tiff
+
+from foa3d.utils import get_item_size
 
 
 def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
@@ -72,14 +76,14 @@ def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
     return save_dir_lst, tmp_dir
 
 
-def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):
+def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff'):
     """
     Save array to file.
 
     Parameters
     ----------
     fname: string
-        output filename (without extension)
+        output filename
 
     save_dir: string
         saving directory string path
@@ -93,44 +97,52 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', odi=False):
     fmt: str
         output format
 
-    odi: bool
-        True when saving ODI maps
-
     Returns
     -------
     None
     """
 
-    # check output format
-    fmt = fmt.lower()
-    if fmt == 'tif' or fmt == 'tiff':
+    # get maximum RAM and initialized array memory size
+    ram = psutil.virtual_memory()[1]
+    item_sz = get_item_size(nd_array.dtype)
+    vol_sz = item_sz * np.prod(nd_array.shape).astype(np.float64)
 
-        # retrieve image pixel size
-        px_sz_z, px_sz_y, px_sz_x = px_sz
+    # copy memory-mapped array (too large for RAM) to output directory
+    if vol_sz >= ram:
+        shutil.copy(nd_array.filename, path.join(save_dir, f'{fname}.npy'))
 
-        # adjust bigtiff optional argument
-        bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
-
-        # save array to TIFF file
-        out_name = f'{fname}.{fmt}'
-        if odi:
-            tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
-                         resolution=(1 / px_sz_x, 1 / px_sz_y),
-                         metadata={'axes': 'ZYX', 'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
-        else:
-            tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
-                         resolution=(1 / px_sz_x, 1 / px_sz_y),
-                         metadata={'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
-
-    # save array to NumPy file
-    elif fmt == 'npy':
-        np.save(path.join(save_dir, fname + '.npy'), nd_array)
-
-    # save array to NIfTI file
-    elif fmt == 'nii':
-        nd_array = nib.Nifti1Image(nd_array, np.eye(4))
-        nd_array.to_filename(path.join(save_dir, fname + '.nii'))
-
-    # raise error
+    # load array to RAM and export to file with requested format
     else:
-        raise ValueError("Unsupported data format!!!")
+        # check output format
+        fmt = fmt.lower()
+        if fmt == 'tif' or fmt == 'tiff':
+
+            # retrieve image pixel size
+            px_sz_z, px_sz_y, px_sz_x = px_sz
+
+            # adjust bigtiff optional argument
+            bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
+
+            # save array to TIFF file
+            out_name = f'{fname}.{fmt}'
+            if nd_array.ndim == 3:
+                tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
+                             resolution=(1 / px_sz_x, 1 / px_sz_y),
+                             metadata={'axes': 'ZYX', 'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
+            elif nd_array.ndim == 4:
+                tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
+                             resolution=(1 / px_sz_x, 1 / px_sz_y),
+                             metadata={'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
+
+        # save array to NumPy file
+        elif fmt == 'npy':
+            np.save(path.join(save_dir, fname + '.npy'), nd_array)
+
+        # save array to NIfTI file
+        elif fmt == 'nii':
+            nd_array = nib.Nifti1Image(nd_array, np.eye(4))
+            nd_array.to_filename(path.join(save_dir, fname + '.nii'))
+
+        # raise error
+        else:
+            raise ValueError("Unsupported data format!!!")

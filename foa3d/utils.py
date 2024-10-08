@@ -90,7 +90,7 @@ def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mod
 
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp()
-    mmap_path = path.join(tmp_dir, name + '.mmap')
+    mmap_path = path.join(tmp_dir, name + '.npy')
 
     if path.exists(mmap_path):
         unlink(mmap_path)   
@@ -149,6 +149,41 @@ def get_available_cores():
     num_cpu = cpu_count() if num_cpu is None else int(num_cpu)
 
     return num_cpu
+
+
+def get_item_size(dtype):
+    """
+    Get the item size in bytes of a data type.
+
+    Parameters
+    ----------
+    dtype: str
+        data type identifier
+
+    Returns
+    -------
+    item_sz: int
+        item size in bytes
+    """
+
+    # data type lists
+    lst_1 = ['uint8', 'int8']
+    lst_2 = ['uint16', 'int16', 'float16', np.float16]
+    lst_3 = ['uint32', 'int32', 'float32', np.float32]
+    lst_4 = ['uint64', 'int64', 'float64', np.float64]
+
+    if dtype in lst_1:
+        item_sz = 1
+    elif dtype in lst_2:
+        item_sz = 2
+    elif dtype in lst_3:
+        item_sz = 4
+    elif dtype in lst_4:
+        item_sz = 8
+    else:
+        raise ValueError("Unsupported data type!")
+
+    return item_sz
 
 
 def delete_tmp_folder(tmp_dir):

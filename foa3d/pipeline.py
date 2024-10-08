@@ -766,29 +766,28 @@ def parallel_odf_at_scales(fbr_vec_img, iso_fbr_img, cli_args, px_sz, save_dir, 
     print_flushed(f"\nODF and dispersion maps saved to: {save_dir}\n")
 
 
-def save_frangi_arrays(fbr_vec_img, fbr_vec_clr, fa_img, frangi_img,
-                       fbr_msk, bc_msk, px_sz, save_dir, img_name):
+def save_frangi_arrays(fbr_vec_img, fbr_vec_clr, fa_img, frangi_img, fbr_msk, bc_msk, px_sz, save_dir, img_name):
     """
     Save the output arrays of the Frangi filter stage to TIF files.
 
     Parameters
     ----------
-    fbr_vec_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
-        fiber orientation vector image
+    fbr_vec_img: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
+        fiber orientation vector field
 
-    fbr_vec_clr: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=uint8)
+    fbr_vec_clr: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=uint8)
         orientation colormap image
 
-    fa_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fa_img: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         fractional anisotropy image
 
-    frangi_img: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
-        Frangi-enhanced volume image (fiber probability)
+    frangi_img: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        Frangi-enhanced image (fiber probability)
 
-    fbr_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    fbr_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         fiber mask image
 
-    bc_msk: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    bc_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         neuron mask image
 
     px_sz: numpy.ndarray (shape=(3,), dtype=float)
@@ -837,25 +836,25 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_s
 
     Parameters
     ----------
-    odf: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z,C), dtype=float32)
+    odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
         ODF spherical harmonics coefficients
 
-    bg: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
+    bg: NumPy memory-map object (axis order=(X,Y,Z), dtype=uint8)
         background for ODF visualization in MRtrix3
 
-    odi_pri: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion parameter
 
-    odi_sec: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         secondary orientation dispersion parameter
 
-    odi_tot: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         total orientation dispersion parameter
 
-    odi_anis: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         orientation dispersion anisotropy parameter
 
-    disarray: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+    disarray: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
 
     px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size (Z,Y,X) [μm]
@@ -877,8 +876,8 @@ def save_odf_arrays(odf, bg, odi_pri, odi_sec, odi_tot, odi_anis, disarray, px_s
     sbfx = f'{odf_scale_um}_{img_name}'
     save_array(f'bg_mrtrixview_sv{sbfx}', save_dir, bg, fmt='nii')
     save_array(f'odf_mrtrixview_sv{sbfx}', save_dir, odf, fmt='nii')
-    save_array(f'odi_pri_sv{sbfx}', save_dir, odi_pri, px_sz, odi=True)
-    save_array(f'odi_sec_sv{sbfx}', save_dir, odi_sec, px_sz, odi=True)
-    save_array(f'odi_tot_sv{sbfx}', save_dir, odi_tot, px_sz, odi=True)
-    save_array(f'odi_anis_sv{sbfx}', save_dir, odi_anis, px_sz, odi=True)
-    save_array(f'disarray_sv{sbfx}', save_dir, disarray, px_sz, odi=True)
+    save_array(f'odi_pri_sv{sbfx}', save_dir, odi_pri, px_sz)
+    save_array(f'odi_sec_sv{sbfx}', save_dir, odi_sec, px_sz)
+    save_array(f'odi_tot_sv{sbfx}', save_dir, odi_tot, px_sz)
+    save_array(f'odi_anis_sv{sbfx}', save_dir, odi_anis, px_sz)
+    save_array(f'disarray_sv{sbfx}', save_dir, disarray, px_sz)
