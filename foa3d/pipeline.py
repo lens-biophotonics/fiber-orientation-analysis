@@ -162,28 +162,28 @@ def init_odf_volumes(vec_img_shp, tmp_dir, odf_scale, odf_degrees=6):
 
     Returns
     -------
-    odf: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z,C), dtype=float32)
+    odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
         initialized array of ODF spherical harmonics coefficients
 
-    bg_mrtrix: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
+    bg_mrtrix: NumPy memory-map object (axis order=(X,Y,Z), dtype=uint8)
         initialized background for ODF visualization in MRtrix3
 
-    odi_pri: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of primary orientation dispersion parameters
 
-    odi_sec: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of secondary orientation dispersion parameters
 
-    odi_tot: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of total orientation dispersion parameters
 
-    odi_anis: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=uint8)
+    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
         initialized array of orientation dispersion anisotropy parameters
 
-    disarray: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X), dtype=float32)
+    disarray: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         local angular disarray
 
-    vec_tensor_eigen: NumPy memory-map object or HDF5 dataset (axis order=(Z,Y,X,C), dtype=float32)
+    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         initialized array of fiber orientation tensor eigenvalues
     """
 
