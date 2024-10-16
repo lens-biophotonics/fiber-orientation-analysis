@@ -432,14 +432,16 @@ def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
     # get shape of new downsampled array
     new_shape = bg_mrtrix_mmap.shape[:-1]
 
-    # normalize
+    # image normalization: get global minimum and maximum values
     if bg_img.ndim == 3:
-        bg_img = normalize_image(bg_img)
+        min_glob = np.min(bg_img)
+        max_glob = np.max(bg_img)
 
     # loop over z-slices, and resize them
     for z in range(0, bg_img.shape[0], vxl_side):
         if bg_img.ndim == 3:
-            tmp_slice = np.mean(bg_img[z:z + vxl_side, ...], axis=0)
+            tmp_slice = normalize_image(bg_img[z:z + vxl_side, ...], min_val=min_glob, max_val=max_glob)
+            tmp_slice = np.mean(tmp_slice, axis=0)
         elif bg_img.ndim == 4:
             tmp_slice = 255.0 * np.sum(np.abs(bg_img[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)

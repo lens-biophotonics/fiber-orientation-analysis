@@ -402,7 +402,7 @@ def normalize_angle(angle, lower=0.0, upper=360.0, dtype=None):
     return norm_angle
 
 
-def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
+def normalize_image(img, min_val=None, max_val=None, max_out_val=255.0, dtype=np.uint8):
     """
     Normalize image data.
 
@@ -410,6 +410,12 @@ def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     ----------
     img: numpy.ndarray
         input image
+        
+    min_val: float
+        minimum input value
+    
+    max_val: float
+        maximum input value
 
     max_out_val: float
         maximum output value
@@ -424,8 +430,10 @@ def normalize_image(img, max_out_val=255.0, dtype=np.uint8):
     """
 
     # get min and max values
-    min_val = np.min(img)
-    max_val = np.max(img)
+    if min_val is None:
+        min_val = np.min(img)
+    if max_val is None:
+        max_val = np.max(img)
 
     # normalize
     if max_val != 0:
