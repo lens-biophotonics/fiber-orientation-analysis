@@ -1,5 +1,4 @@
 import psutil
-import shutil
 import tempfile
 
 from datetime import datetime
@@ -7,7 +6,7 @@ from os import makedirs, path
 
 import nibabel as nib
 import numpy as np
-import tifffile as tiff
+from tifffile import TiffWriter
 
 from foa3d.utils import get_item_size
 
@@ -76,7 +75,7 @@ def create_save_dirs(img_path, img_name, cli_args, is_fovec=False):
     return save_dir_lst, tmp_dir
 
 
-def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff'):
+def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', ram=None):
     """
     Save array to file.
 
@@ -97,52 +96,46 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff'):
     fmt: str
         output format
 
+    ram: float
+        maximum RAM available
+
     Returns
     -------
     None
     """
 
     # get maximum RAM and initialized array memory size
-    ram = psutil.virtual_memory()[1]
-    item_sz = get_item_size(nd_array.dtype)
-    vol_sz = item_sz * np.prod(nd_array.shape).astype(np.float64)
+    if ram is None:
+        ram = psutil.virtual_memory()[1]
+    itm_sz = get_item_size(nd_array.dtype)
+    dz = np.floor(ram / (itm_sz * np.prod(nd_array.shape[1:]))).astype(int)
+    nz = np.ceil(nd_array.shape[0] / dz).astype(int)
 
-    # copy memory-mapped array (too large for RAM) to output directory
-    if vol_sz >= ram:
-        shutil.copy(nd_array.filename, path.join(save_dir, f'{fname}.npy'))
+    # check output format
+    fmt = fmt.lower()
+    if fmt == 'tif' or fmt == 'tiff':
 
-    # load array to RAM and export to file with requested format
+        # retrieve image pixel size
+        px_sz_z, px_sz_y, px_sz_x = px_sz
+
+        # adjust bigtiff optional argument
+        bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
+        out_name = f'{fname}.{fmt}'
+        with TiffWriter(path.join(save_dir, out_name), bigtiff=bigtiff, append=True) as tif:
+            for z in range(nz):
+                zs = z * dz
+                tif.write(nd_array[zs:zs + dz, ...], contiguous=True, resolution=(1 / px_sz_x, 1 / px_sz_y),
+                          metadata={'spacing': px_sz_z, 'unit': 'um'})
+
+    # save array to NumPy file
+    elif fmt == 'npy':
+        np.save(path.join(save_dir, fname + '.npy'), nd_array)
+
+    # save array to NIfTI file
+    elif fmt == 'nii':
+        nd_array = nib.Nifti1Image(nd_array, np.eye(4))
+        nd_array.to_filename(path.join(save_dir, fname + '.nii'))
+
+    # raise error
     else:
-        # check output format
-        fmt = fmt.lower()
-        if fmt == 'tif' or fmt == 'tiff':
-
-            # retrieve image pixel size
-            px_sz_z, px_sz_y, px_sz_x = px_sz
-
-            # adjust bigtiff optional argument
-            bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
-
-            # save array to TIFF file
-            out_name = f'{fname}.{fmt}'
-            if nd_array.ndim == 3:
-                tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
-                             resolution=(1 / px_sz_x, 1 / px_sz_y),
-                             metadata={'axes': 'ZYX', 'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
-            elif nd_array.ndim == 4:
-                tiff.imwrite(path.join(save_dir, out_name), nd_array, imagej=True, bigtiff=bigtiff,
-                             resolution=(1 / px_sz_x, 1 / px_sz_y),
-                             metadata={'spacing': px_sz_z, 'unit': 'um'}, compression='zlib')
-
-        # save array to NumPy file
-        elif fmt == 'npy':
-            np.save(path.join(save_dir, fname + '.npy'), nd_array)
-
-        # save array to NIfTI file
-        elif fmt == 'nii':
-            nd_array = nib.Nifti1Image(nd_array, np.eye(4))
-            nd_array.to_filename(path.join(save_dir, fname + '.nii'))
-
-        # raise error
-        else:
-            raise ValueError("Unsupported data format!!!")
+        raise ValueError("Unsupported data format!!!")

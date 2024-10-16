@@ -139,7 +139,10 @@ def compute_odf_map(fbr_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray,
                     zv, yv, xv = z // vxl_side, y // vxl_side, x // vxl_side
                     odf[zv, yv, xv, :] = fiber_vectors_to_sph_harm(vec_arr, odf_deg, odf_norm)
                     vec_tensor_eigen[zv, yv, xv, :] = compute_vec_tensor_eigen(vec_arr)
-                    disarray[zv, yv, xv] = compute_disarray(vec_arr)
+
+                    # (optional) compute angular disarray
+                    if disarray is not None:
+                        disarray[zv, yv, xv] = compute_disarray(vec_arr)
 
     # compute slice-wise dispersion and anisotropy parameters
     compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, odi_anis)
@@ -197,16 +200,19 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
     diff = np.abs(vec_tensor_eigen[..., 1] - vec_tensor_eigen[..., 0])
 
     # primary dispersion (0.3183098861837907 = 1/π)
-    odi_pri[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k2)).astype(np.float32)
+    if odi_pri is not None:
+        odi_pri[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k2)).astype(np.float32)
 
     # secondary dispersion
-    odi_sec[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k3)).astype(np.float32)
+    if odi_sec is not None:
+        odi_sec[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k3)).astype(np.float32)
+
+    # dispersion anisotropy
+    if odi_anis is not None:
+        odi_anis[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, diff)).astype(np.float32)
 
     # total dispersion
     odi_tot[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3))))).astype(np.float32)
-
-    # dispersion anisotropy
-    odi_anis[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, diff)).astype(np.float32)
 
 
 @njit(cache=True)
@@ -514,7 +520,8 @@ def mask_orientation_dispersion(odi_lst, vec_tensor_eigen):
     bg_msk = np.all(vec_tensor_eigen == 0, axis=-1)
 
     for odi in odi_lst:
-        odi[bg_msk] = 0
+        if odi is not None:
+            odi[bg_msk] = 0
 
 
 @njit(cache=True)

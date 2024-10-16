@@ -100,6 +100,9 @@ def get_cli_parser():
                             help='apply tissue background mask')
     cli_parser.add_argument('-v', '--vec', action='store_true', default=False,
                             help='fiber orientation vector image')
+    cli_parser.add_argument('-e', '--exp-all', action='store_true', default=False,
+                            help='save the full range of images produced by the Frangi filter and ODF stages, '
+                                 'e.g. for testing purposes (see documentation)')
 
     # parse arguments
     cli_args = cli_parser.parse_args()
@@ -277,8 +280,8 @@ def get_frangi_config(cli_args):
 
     hsv_vec_cmap: bool
 
-    out_name: str
-        output file name
+    exp_all: bool
+        export all images
     """
 
     # microscopy image pixel and PSF size
@@ -308,8 +311,11 @@ def get_frangi_config(cli_args):
     z_max = int(np.ceil(cli_args.z_max / px_sz[0])) if cli_args.z_max is not None else cli_args.z_max
     z_rng = (z_min, z_max)
 
+    # export all flag
+    exp_all = cli_args.exp_all
+
     return alpha, beta, gamma, scales_px, scales_um, smooth_sigma, \
-        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, fb_thr, msk_bc, hsv_vec_cmap
+        px_sz, px_sz_iso, z_rng, bc_ch, fb_ch, fb_thr, msk_bc, hsv_vec_cmap, exp_all
 
 
 def get_resolution(cli_args):
