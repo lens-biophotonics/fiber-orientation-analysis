@@ -34,7 +34,6 @@ def create_background_mask(img, method='yen', black_bg=False):
     bg_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
         boolean background mask
     """
-
     # select thresholding method
     if method == 'li':
         thresh = threshold_li(img)
@@ -87,10 +86,9 @@ def create_memory_map(shape, dtype, name='tmp', tmp_dir=None, arr=None, mmap_mod
     mmap: NumPy memory map
         memory-mapped array
     """
-
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp()
-    mmap_path = path.join(tmp_dir, name + '.npy')
+    mmap_path = path.join(tmp_dir, name + '.mmap')
 
     if path.exists(mmap_path):
         unlink(mmap_path)   
@@ -144,7 +142,6 @@ def get_available_cores():
     num_cpu: int
         number of available cores
     """
-
     num_cpu = environ.pop('OMP_NUM_THREADS', default=None)
     num_cpu = cpu_count() if num_cpu is None else int(num_cpu)
 
@@ -165,7 +162,6 @@ def get_item_size(dtype):
     item_sz: int
         item size in bytes
     """
-
     # data type lists
     lst_1 = ['uint8', 'int8']
     lst_2 = ['uint16', 'int16', 'float16', np.float16]
@@ -225,7 +221,6 @@ def divide_nonzero(nd_array1, nd_array2, new_val=1e-10):
     divided: numpy.ndarray
         divided array
     """
-
     divisor = np.copy(nd_array2)
     divisor[divisor == 0] = new_val
     divided = np.divide(nd_array1, divisor)
@@ -256,7 +251,6 @@ def elapsed_time(start_time):
     secs: float
         seconds
     """
-
     stop_time = perf_counter()
     tot = stop_time - start_time
 
@@ -303,7 +297,6 @@ def get_item_bytes(data):
     bts: int
         item size in bytes
     """
-
     # type byte size
     try:
         bts = int(np.iinfo(data.dtype).bits / 8)
@@ -328,10 +321,9 @@ def get_config_label(cli_args):
     cfg_lbl: str
         Frangi filter configuration label
     """
-
     cfg_lbl = '_s'
     for s in cli_args.scales:
-        cfg_lbl += f'{s}'
+        cfg_lbl += f'{s}_'
     cfg_lbl = f'a{cli_args.alpha}_b{cli_args.beta}_g{cli_args.gamma}_t{cli_args.fb_thr}{cfg_lbl}'
 
     return cfg_lbl
@@ -428,7 +420,6 @@ def normalize_image(img, min_val=None, max_val=None, max_out_val=255.0, dtype=np
     norm_img: numpy.ndarray
         normalized image
     """
-
     # get min and max values
     if min_val is None:
         min_val = np.min(img)
@@ -461,7 +452,6 @@ def hsv_orient_cmap(vec_img):
     rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
-
     # extract planar components
     vy, vx = (vec_img[..., 1], vec_img[..., 2])
 
@@ -534,7 +524,6 @@ def transform_axes(nd_array, flipped=None, swapped=None, expand=None):
     nd_array: numpy.ndarray
         transformed data array
     """
-
     if flipped is not None:
         nd_array = np.flip(nd_array, axis=flipped)
 
@@ -571,7 +560,6 @@ def rgb_orient_cmap(vec_img, minimum=0, stretch=1, q=8):
     rgb_map: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
         orientation color map
     """
-
     # take absolute value
     vec_img = np.abs(vec_img)
 

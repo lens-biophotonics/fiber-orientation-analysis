@@ -44,7 +44,6 @@ def adjust_axis_range(ax_iter, img_shp, slc_per_ax, start, stop, ovlp=0):
     pad: numpy.ndarray (shape=(2,), dtype=int)
         lower and upper padding ranges [px]
     """
-
     # initialize slice padding array
     pad = np.zeros((2,), dtype=np.int64)
 
@@ -66,6 +65,22 @@ def adjust_axis_range(ax_iter, img_shp, slc_per_ax, start, stop, ovlp=0):
         stop = img_shp
 
     return start, stop, pad
+
+
+def check_background(img, ts_msk=None, ts_thr=0.0001):
+    """
+    Description
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    is_valid: bool
+    """
+    is_valid = np.count_nonzero(ts_msk) / np.prod(ts_msk.shape) > ts_thr if ts_msk is not None else np.max(img) != 0
+
+    return is_valid
 
 
 @njit(cache=True)
@@ -108,7 +123,6 @@ def compute_axis_range(ax, ax_iter, slc_shp, img_shp, slc_per_dim, ovlp=0, flip=
     pad: numpy.ndarray (shape=(2,), dtype=int)
         lower and upper padding ranges [px]
     """
-
     # compute start and stop coordinates
     start = ax_iter[ax] * slc_shp[ax]
     stop = start + slc_shp[ax]
@@ -158,7 +172,6 @@ def compute_slice_range(ax_iter, slc_shp, img_shp, slc_per_dim, ovlp=0, flip=Fal
     pad: np.ndarray (shape=(3,2), dtype=int)
         slice padding range [px]
     """
-
     # generate axis range and padding array
     dim = len(ax_iter)
     slc = tuple()
@@ -290,31 +303,17 @@ def compute_slice_size(max_ram, mem_growth, mem_fudge, batch_sz, ns=1):
     return slc_sz
 
 
-def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi_sigma_um,
-                        mem_growth=149.7, mem_fudge=1.0, jobs=None, ram=None, shp_thr=7):
+def config_frangi_batch(in_img, frangi_cfg, px_sz_iso, mem_growth=149.7, mem_fudge=1.0, jobs=None, ram=None, shp_thr=7):
     """
     Compute size and number of the batches of basic microscopy image slices
     analyzed in parallel.
 
     Parameters
     ----------
-    px_sz: numpy.ndarray (shape=(3,), dtype=float)
-        pixel size [μm]
+
 
     px_sz_iso: int
         isotropic pixel size [μm]
-
-    img_shp: numpy.ndarray (shape=(3,), dtype=int)
-        total image shape [px]
-
-    item_sz: int
-        image item size [B]
-
-    smooth_sigma: numpy.ndarray (shape=(3,), dtype=int)
-        3D standard deviation of the smoothing Gaussian filter [px]
-
-    frangi_sigma_um: numpy.ndarray (dtype=float)
-        Frangi filter scales [μm]
 
     mem_growth: float
         empirical memory growth factor
@@ -346,7 +345,7 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
         shape of the basic image slices
         analyzed using parallel threads [μm]
 
-    px_rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
+    rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
         3D image resize ratio
 
     ovlp: int
@@ -365,16 +364,17 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
         jobs = num_cpu
 
     # number of spatial scales
-    ns = len(frangi_sigma_um)
+    ns = len(frangi_cfg['scales_um'])
 
     # initialize slice batch size
     batch_sz = np.min([jobs // ns, num_cpu]).astype(int) + 1
 
     # get pixel resize ratio
-    px_rsz_ratio = np.divide(px_sz, px_sz_iso)
+    rsz_ratio = np.divide(in_img['px_sz'], px_sz_iso)
 
     # compute slice overlap (boundary artifacts suppression)
-    ovlp, ovlp_rsz = compute_overlap(smooth_sigma, frangi_sigma_um, px_rsz_ratio=px_rsz_ratio)
+    ovlp, ovlp_rsz = compute_overlap(frangi_cfg['smooth_sd'], frangi_cfg['scales_um'],
+                                     px_rsz_ratio=rsz_ratio)
 
     # compute the shape of basic microscopy image slices
     in_slc_shp = np.array([-1])
@@ -385,9 +385,10 @@ def config_frangi_batch(px_sz, px_sz_iso, img_shp, item_sz, smooth_sigma, frangi
                 "Basic image slices do not fit the available RAM: decrease spatial scales and/or maximum scale value!")
         else:
             slc_sz = compute_slice_size(ram, mem_growth, mem_fudge, batch_sz, ns)
-            in_slc_shp, in_slc_shp_um = compute_slice_shape(img_shp, item_sz, px_sz=px_sz, slc_sz=slc_sz, ovlp=ovlp)
+            in_slc_shp, in_slc_shp_um = compute_slice_shape(in_img['shape'], in_img['item_sz'],
+                                                            px_sz=in_img['px_sz'], slc_sz=slc_sz, ovlp=ovlp)
 
-    return batch_sz, in_slc_shp, in_slc_shp_um, px_rsz_ratio, ovlp, ovlp_rsz
+    return batch_sz, in_slc_shp, in_slc_shp_um, rsz_ratio, ovlp, ovlp_rsz
 
 
 def crop(img, rng, ovlp=None, flip=()):
@@ -413,7 +414,6 @@ def crop(img, rng, ovlp=None, flip=()):
     img_out: numpy.ndarray
         cropped microscopy image
     """
-
     # delete overlapping boundaries
     if ovlp is not None:
         img = img[ovlp[0]:img.shape[0] - ovlp[0], ovlp[1]:img.shape[1] - ovlp[1], ovlp[2]:img.shape[2] - ovlp[2]]
@@ -454,15 +454,18 @@ def crop_lst(img_lst, rng, ovlp=None, flip=()):
     img_lst: list
         list of cropped image slices
     """
-
     for s, img in enumerate(img_lst):
         if img is not None:
-            img_lst[s] = crop(img, rng, ovlp=ovlp, flip=flip)
+            if isinstance(img, dict):
+                for key in img.keys():
+                    img_lst[s][key] = crop(img[key], rng, ovlp=ovlp, flip=flip)
+            else:
+                img_lst[s] = crop(img, rng, ovlp=ovlp, flip=flip)
 
     return img_lst
 
 
-def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, msk_bc=False, jobs=None):
+def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, msk_bc=False):
     """
     Generate image slice ranges for the Frangi filtering stage.
 
@@ -488,43 +491,36 @@ def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, ms
         if True, mask neuronal bodies
         in the optionally provided image channel
 
-    jobs: int
-        number of parallel jobs (threads)
-
     Returns
     -------
-    in_rng_lst: list
-        list of input slice index ranges
+    slc_rng: dict
+        in_rng: list
+            list of input slice index ranges
 
-    in_pad_lst: list
-        list of slice padding arrays
+        in_pad: list
+            list of slice padding arrays
 
-    out_rng_lst: list
-        list of output slice index ranges
+        out_rng: list
+            list of output slice index ranges
 
-    bc_rng_lst: list
-        (optional) list of neuronal body slice index ranges
+        bc_rng: list
+            (optional) list of neuronal body slice index ranges
 
     out_slc_shp: numpy.ndarray (shape=(3,), dtype=int)
         shape of the processed image slices [px]
 
-    tot_slc_num: int
+    tot_slc: int
         total number of analyzed image slices
 
     batch_sz: int
         adjusted slice batch size
     """
-
     # adjust output shapes
     out_slc_shp = np.ceil(np.multiply(px_rsz_ratio, in_slc_shp)).astype(int)
     out_img_shp = np.ceil(np.multiply(px_rsz_ratio, img_shp)).astype(int)
 
     # number of image slices along each axis
     slc_per_dim = np.floor(np.divide(img_shp, in_slc_shp)).astype(int)
-
-    # number of logical cores
-    if jobs is None:
-        jobs = get_available_cores()
 
     # initialize empty range lists
     in_pad_lst = list()
@@ -550,16 +546,23 @@ def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, ms
             bc_rng_lst.append(None)
 
     # total number of slices
-    tot_slc_num = len(in_rng_lst)
+    tot_slc = len(in_rng_lst)
 
     # adjust slice batch size
-    if batch_sz > tot_slc_num:
-        batch_sz = tot_slc_num
+    if batch_sz > tot_slc:
+        batch_sz = tot_slc
 
-    return in_rng_lst, in_pad_lst, out_rng_lst, bc_rng_lst, out_slc_shp, tot_slc_num, batch_sz
+    # fill slice range dictionary
+    slc_rng = dict()
+    slc_rng['in_rng'] = in_rng_lst
+    slc_rng['in_pad'] = in_pad_lst
+    slc_rng['out_rng'] = out_rng_lst
+    slc_rng['bc_rng'] = bc_rng_lst
+
+    return slc_rng, out_slc_shp, tot_slc, batch_sz
 
 
-def slice_image(img, rng, ch, ch_ax, ts_msk=None):
+def slice_image(img, rng, ch_ax, ch, ts_msk=None):
     """
     Slice desired channel from input image volume.
 

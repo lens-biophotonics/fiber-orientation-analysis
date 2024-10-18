@@ -3,65 +3,11 @@ import scipy as sp
 from numba import njit
 from skimage.transform import resize
 
-from foa3d.utils import normalize_image, transform_axes
+from foa3d.spharm import fiber_vectors_to_sph_harm, get_sph_harm_ncoeff
+from foa3d.utils import create_memory_map, normalize_image, transform_axes
 
 
-def compute_disarray(fbr_vec):
-    """
-    Compute local angular disarray, i.e. the misalignment degree of nearby orientation vectors
-    with respect to the mean direction (Giardini et al., Front. Physiol. 2021).
-
-    Parameters
-    ----------
-    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
-        array of fiber orientation vectors
-        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
-
-    Returns
-    -------
-    disarray: float32
-        local angular disarray
-    """
-    fbr_vec = np.delete(fbr_vec, np.all(fbr_vec == 0, axis=-1), axis=0)
-    disarray = (1 - np.linalg.norm(np.mean(fbr_vec, axis=0))).astype(np.float32)
-
-    return disarray
-
-
-@njit(cache=True)
-def compute_fiber_angles(fbr_vec, norm):
-    """
-    Estimate the spherical coordinates (φ azimuth and θ polar angles)
-    of the fiber orientation vectors returned by the Frangi filtering stage
-    (all-zero background vectors are excluded).
-
-    Parameters
-    ----------
-    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
-        array of fiber orientation vectors
-        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
-
-    norm: numpy.ndarray (shape=(N,), dtype=float)
-        2-norm of fiber orientation vectors
-
-    Returns
-    -------
-    phi: numpy.ndarray (shape=(N,), dtype=float)
-        fiber azimuth angle [rad]
-
-    theta: numpy.ndarray (shape=(N,), dtype=float)
-        fiber polar angle [rad]
-    """
-
-    fbr_vec = fbr_vec[norm > 0, :]
-    phi = np.arctan2(fbr_vec[:, 1], fbr_vec[:, 2])
-    theta = np.arccos(fbr_vec[:, 0] / norm[norm > 0])
-
-    return phi, theta
-
-
-def compute_odf_map(fbr_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray, vec_tensor_eigen, vxl_side, odf_norm,
-                    odf_deg=6, vxl_thr=0.5, vec_thr=0.000001):
+def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf_deg=6, vxl_thr=0.5, vec_thr=0.000001):
     """
     Compute the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -72,22 +18,22 @@ def compute_odf_map(fbr_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray,
         fiber orientation vectors
 
     odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
-        initialized array of ODF spherical harmonics coefficients
+                initialized array of ODF spherical harmonics coefficients
 
-    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        primary orientation dispersion index
+    odi: dict
+        orientation dispersion dictionary
 
-    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        secondary orientation dispersion index
+            odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                primary orientation dispersion index
 
-    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        total orientation dispersion index
+            odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                secondary orientation dispersion index
 
-    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        orientation dispersion index anisotropy
+            odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                total orientation dispersion index
 
-    disarray: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
-        local angular disarray
+            odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                orientation dispersion index anisotropy
 
     vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         initialized array of orientation tensor eigenvalues
@@ -112,7 +58,6 @@ def compute_odf_map(fbr_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray,
     odf: numpy.ndarray (axis order=(X,Y,Z,C), dtype=float32)
         volumetric map of real-valued spherical harmonics coefficients
     """
-
     # iterate over ODF super-voxels
     ref_vxl_size = min(vxl_side, fbr_vec.shape[0]) * vxl_side**2
     for z in range(0, fbr_vec.shape[0], vxl_side):
@@ -140,15 +85,11 @@ def compute_odf_map(fbr_vec, odf, odi_pri, odi_sec, odi_tot, odi_anis, disarray,
                     odf[zv, yv, xv, :] = fiber_vectors_to_sph_harm(vec_arr, odf_deg, odf_norm)
                     vec_tensor_eigen[zv, yv, xv, :] = compute_vec_tensor_eigen(vec_arr)
 
-                    # (optional) compute angular disarray
-                    if disarray is not None:
-                        disarray[zv, yv, xv] = compute_disarray(vec_arr)
-
     # compute slice-wise dispersion and anisotropy parameters
-    compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, odi_anis)
+    compute_orientation_dispersion(vec_tensor_eigen, **odi)
 
-    # keep a black background
-    mask_orientation_dispersion([odi_pri, odi_sec, odi_tot, odi_anis], vec_tensor_eigen)
+    # set dispersion background to 0
+    mask_orientation_dispersion(vec_tensor_eigen, odi)
 
     # transform axes
     odf = transform_axes(odf, swapped=(0, 2), flipped=(1, 2))
@@ -167,20 +108,6 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
         orientation tensor eigenvalues
         computed from an ODF super-voxel
 
-    odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        primary orientation dispersion index
-
-    odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        secondary orientation dispersion index
-
-    odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        total orientation dispersion index
-
-    odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        orientation dispersion index anisotropy
-
-    Returns
-    -------
     odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion index
 
@@ -192,77 +119,32 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
 
     odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         orientation dispersion index anisotropy
-    """
-
-    k1 = np.abs(vec_tensor_eigen[..., 2])
-    k2 = np.abs(vec_tensor_eigen[..., 1])
-    k3 = np.abs(vec_tensor_eigen[..., 0])
-    diff = np.abs(vec_tensor_eigen[..., 1] - vec_tensor_eigen[..., 0])
-
-    # primary dispersion (0.3183098861837907 = 1/π)
-    if odi_pri is not None:
-        odi_pri[:] = (1 - 0.3183098861837907 * np.arctan2(k1, k2)).astype(np.float32)
-
-    # secondary dispersion
-    if odi_sec is not None:
-        odi_sec[:] = (1 - 0.3183098861837907 * np.arctan2(k1, k3)).astype(np.float32)
-
-    # dispersion anisotropy
-    if odi_anis is not None:
-        odi_anis[:] = (1 - 0.3183098861837907 * np.arctan2(k1, diff)).astype(np.float32)
-
-    # total dispersion
-    odi_tot[:] = (1 - 0.3183098861837907 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3))))).astype(np.float32)
-
-
-@njit(cache=True)
-def compute_real_sph_harm(degree, order, phi, sin_theta, cos_theta, norm_factors):
-    """
-    Estimate the coefficients of the real spherical harmonics series expansion
-    as described by Alimi et al. (Medical Image Analysis, 2020).
-
-    Parameters
-    ----------
-    degree: int
-        degree index of the spherical harmonics expansion
-
-    order: int
-        order index of the spherical harmonics expansion
-
-    phi: float
-        azimuth angle [rad]
-
-    sin_theta: float
-        polar angle sine
-
-    cos_theta: float
-        polar angle cosine
-
-    norm_factors: numpy.ndarray (dtype: float)
-        normalization factors
 
     Returns
     -------
-    real_sph_harm: float
-        real-valued spherical harmonic coefficient
+    None
     """
+    # get difference between secondary tensor eigenvalues
+    diff = np.abs(vec_tensor_eigen[..., 1] - vec_tensor_eigen[..., 0])
 
-    if degree == 0:
-        real_sph_harm = norm_factors[0, 0]
-    elif degree == 2:
-        real_sph_harm = sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm_factors[1, :])
-    elif degree == 4:
-        real_sph_harm = sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm_factors[2, :])
-    elif degree == 6:
-        real_sph_harm = sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm_factors[3, :])
-    elif degree == 8:
-        real_sph_harm = sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm_factors[4, :])
-    elif degree == 10:
-        real_sph_harm = sph_harm_degree_10(order, phi, sin_theta, cos_theta, norm_factors[5, :])
-    else:
-        raise ValueError("\n  Invalid degree of the spherical harmonics series expansion!!!")
+    # get absolute tensor eigenvalues
+    avte = np.abs(vec_tensor_eigen)
 
-    return real_sph_harm
+    # primary dispersion (0.3183098861837907 = 1/π)
+    if odi_pri is not None:
+        odi_pri[:] = (1 - 0.3183098861837907 * np.arctan2(avte[..., 2], avte[..., 1])).astype(np.float32)
+
+    # secondary dispersion
+    if odi_sec is not None:
+        odi_sec[:] = (1 - 0.3183098861837907 * np.arctan2(avte[..., 2], avte[..., 0])).astype(np.float32)
+
+    # dispersion anisotropy
+    if odi_anis is not None:
+        odi_anis[:] = (1 - 0.3183098861837907 * np.arctan2(avte[..., 2], diff)).astype(np.float32)
+
+    # total dispersion
+    odi_tot[:] = (1 - 0.3183098861837907 *
+                  np.arctan2(avte[..., 2], np.sqrt(np.abs(np.multiply(avte[..., 1], avte[..., 0]))))).astype(np.float32)
 
 
 def compute_vec_tensor_eigen(fbr_vec):
@@ -281,7 +163,6 @@ def compute_vec_tensor_eigen(fbr_vec):
     vec_tensor_eigen: numpy.ndarray (shape=(3,), dtype=float32)
         orientation tensor eigenvalues in ascending order
     """
-
     fbr_vec = np.delete(fbr_vec, np.all(fbr_vec == 0, axis=-1), axis=0)
     fbr_vec.shape = (-1, 3)
     t = np.zeros((3, 3))
@@ -293,144 +174,34 @@ def compute_vec_tensor_eigen(fbr_vec):
     return vec_tensor_eigen
 
 
-factorial_lut = np.array([
-    1, 1, 2, 6, 24, 120, 720, 5040, 40320,
-    362880, 3628800, 39916800, 479001600,
-    6227020800, 87178291200, 1307674368000,
-    20922789888000, 355687428096000, 6402373705728000,
-    121645100408832000, 2432902008176640000], dtype=np.double)
-
-
-@njit(cache=True)
-def factorial(n):
-    """
-    Retrieve factorial using pre-computed LUT.
-
-    Parameters
-    ----------
-    n: int
-        integer number (max: 20)
-
-    Returns
-    -------
-    f: int
-        factorial
-    """
-    if n > 20:
-        raise ValueError
-
-    return factorial_lut[n]
-
-
-@njit(cache=True)
-def fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff):
-    """
-    Generate the real-valued symmetric spherical harmonics series expansion
-    from fiber φ azimuth and θ polar angles,
-    i.e. the spherical coordinates of the fiber orientation vectors.
-
-    Parameters
-    ----------
-    phi: numpy.ndarray (shape=(N,), dtype=float)
-        fiber azimuth angles [rad]
-        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
-
-    theta: numpy.ndarray (shape=(N,), dtype=float)
-        fiber polar angle [rad]
-        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
-
-    degrees: int
-        degrees of the spherical harmonics expansion
-
-    norm_factors: numpy.ndarray (dtype: float)
-        normalization factors
-
-    ncoeff: int
-        number of spherical harmonics coefficients
-
-    Returns
-    -------
-    real_sph_harm: numpy.ndarray (shape=(ncoeff,), dtype=float)
-        array of real-valued spherical harmonics coefficients
-        building the spherical harmonics series expansion
-    """
-
-    real_sph_harm = np.zeros(ncoeff)
-    i = 0
-    for n in range(0, degrees + 1, 2):
-        for m in range(-n, n + 1, 1):
-            for p, t in zip(phi, theta):
-                real_sph_harm[i] += compute_real_sph_harm(n, m, p, np.sin(t), np.cos(t), norm_factors)
-            i += 1
-
-    real_sph_harm /= phi.size
-
-    return real_sph_harm
-
-
-def fiber_vectors_to_sph_harm(fbr_vec, degrees, norm_factors):
-    """
-    Generate the real-valued symmetric spherical harmonics series expansion
-    from the fiber orientation vectors returned by the Frangi filter stage.
-
-    Parameters
-    ----------
-    fbr_vec: numpy.ndarray (shape=(N,3), dtype=float)
-        array of fiber orientation vectors
-        (reshaped super-voxel of shape=(Nz,Ny,Nx), i.e. N=Nz*Ny*Nx)
-
-    degrees: int
-        degrees of the spherical harmonics expansion
-
-    norm_factors: numpy.ndarray (dtype: float)
-        normalization factors
-
-    Returns
-    -------
-    real_sph_harm: numpy.ndarray (shape=(ncoeff,), dtype=float)
-        real-valued spherical harmonics coefficients
-    """
-
-    fbr_vec.shape = (-1, 3)
-    ncoeff = get_sph_harm_ncoeff(degrees)
-
-    norm = np.linalg.norm(fbr_vec, axis=-1)
-    if np.sum(norm) < np.sqrt(fbr_vec.shape[0]):
-        return np.zeros(ncoeff)
-
-    phi, theta = compute_fiber_angles(fbr_vec, norm)
-
-    real_sph_harm = fiber_angles_to_sph_harm(phi, theta, degrees, norm_factors, ncoeff)
-
-    return real_sph_harm
-
-
-def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
+def generate_odf_background(bg_mrtrix, fbr_vec, vxl_side, iso_fbr=None):
     """
     Generate the downsampled background image required
     to visualize the 3D ODF map in MRtrix3.
 
     Parameters
     ----------
-    bg_img: NumPy memory-map object or HDF5 dataset
-                  (axis order=(Z,Y,X), dtype=uint8; or axis order=(Z,Y,X,C), dtype=float32)
-        fiber volume image or orientation vector volume
-        to be used as the MRtrix3 background image
-
-    bg_mrtrix_mmap: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
+    bg_mrtrix: NumPy memory-map object (axis order=(X,Y,Z), dtype=uint8)
         initialized background array for ODF visualization in MRtrix3
+
+    fbr_vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
+        fiber orientation vectors
 
     vxl_side: int
         side of the ODF super-voxel [px]
 
+    iso_fbr: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
+        isotropic fiber image
+
     Returns
     -------
-    bg_mrtrix_mmap: NumPy memory-map object or HDF5 dataset (axis order=(X,Y,Z), dtype=uint8)
-        downsampled background for ODF visualization in MRtrix3
+    None
     """
+    # select background data
+    bg_img = fbr_vec if iso_fbr is None else iso_fbr
 
     # get shape of new downsampled array
-    new_shape = bg_mrtrix_mmap.shape[:-1]
+    new_shape = bg_mrtrix.shape[:-1]
 
     # image normalization: get global minimum and maximum values
     if bg_img.ndim == 3:
@@ -438,295 +209,132 @@ def generate_odf_background(bg_img, bg_mrtrix_mmap, vxl_side):
         max_glob = np.max(bg_img)
 
     # loop over z-slices, and resize them
-    for z in range(0, bg_img.shape[0], vxl_side):
+    for z in range(vxl_side // 2, bg_img.shape[0], vxl_side):
         if bg_img.ndim == 3:
-            tmp_slice = normalize_image(bg_img[z:z + vxl_side, ...], min_val=min_glob, max_val=max_glob)
-            tmp_slice = np.mean(tmp_slice, axis=0)
+            tmp_slice = normalize_image(bg_img[z], min_val=min_glob, max_val=max_glob)
         elif bg_img.ndim == 4:
             tmp_slice = 255.0 * np.sum(np.abs(bg_img[z, ...]), axis=-1)
             tmp_slice = np.where(tmp_slice <= 255.0, tmp_slice, 255.0)
 
         tmp_slice = transform_axes(tmp_slice, swapped=(0, 1), flipped=(0, 1))
-        bg_mrtrix_mmap[..., z // vxl_side] = \
+        bg_mrtrix[..., z // vxl_side] = \
             resize(tmp_slice, output_shape=new_shape, anti_aliasing=True, preserve_range=True)
 
 
-@njit(cache=True)
-def get_sph_harm_ncoeff(degrees):
+def init_odf_arrays(vec_img_shp, tmp_dir, odf_scale, odf_deg=6, exp_all=False):
     """
-    Get the number of coefficients of the real spherical harmonics series
-    expansion.
+    Initialize the output datasets of the ODF analysis stage.
 
     Parameters
     ----------
-    degrees: int
+    vec_img_shp: tuple
+        vector volume shape [px]
+
+    tmp_dir: str
+        temporary file directory
+
+    odf_scale: int
+        fiber ODF resolution (super-voxel side [px])
+
+    odf_deg: int
         degrees of the spherical harmonics series expansion
+
+    exp_all: bool
+        export all images
 
     Returns
     -------
-    ncoeff: int
-        number of spherical harmonics coefficients
+    odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
+                initialized array of ODF spherical harmonics coefficients
+
+    odi: dict
+        dispersion image dictionary
+
+            odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                initialized array of primary orientation dispersion parameters
+
+            odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                initialized array of secondary orientation dispersion parameters
+
+            odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                initialized array of total orientation dispersion parameters
+
+            odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+                initialized array of orientation dispersion anisotropy parameters
+
+    bg_mrtrix: NumPy memory-map object (axis order=(X,Y,Z), dtype=uint8)
+                initialized background for ODF visualization in MRtrix3
+
+    vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
+        initialized fiber orientation tensor eigenvalues
     """
-    ncoeff = (2 * (degrees // 2) + 1) * ((degrees // 2) + 1)
+    # ODI maps shape
+    odi_shp = tuple(np.ceil(np.divide(vec_img_shp, odf_scale)).astype(int))
 
-    return ncoeff
+    # create downsampled background memory map
+    bg_shp = tuple(np.flip(odi_shp))
+    bg_mrtrix = create_memory_map(bg_shp, dtype='uint8', name=f'bg_tmp{odf_scale}', tmp_dir=tmp_dir)
+
+    # create ODF memory map
+    nc = get_sph_harm_ncoeff(odf_deg)
+    odf_shp = odi_shp + (nc,)
+    odf = create_memory_map(odf_shp, dtype='float32', name=f'odf_tmp{odf_scale}', tmp_dir=tmp_dir)
+
+    # create orientation tensor memory map
+    vec_tensor_shape = odi_shp + (3,)
+    vec_tensor_eigen = create_memory_map(vec_tensor_shape, dtype='float32',
+                                         name=f'tensor_tmp{odf_scale}', tmp_dir=tmp_dir)
+
+    # create ODI memory maps
+    odi_tot = create_memory_map(odi_shp, dtype='float32', name=f'odi_tot_tmp{odf_scale}', tmp_dir=tmp_dir)
+    if exp_all:
+        odi_pri = create_memory_map(odi_shp, dtype='float32', name=f'odi_pri_tmp{odf_scale}', tmp_dir=tmp_dir)
+        odi_sec = create_memory_map(odi_shp, dtype='float32', name=f'odi_sec_tmp{odf_scale}', tmp_dir=tmp_dir)
+        odi_anis = create_memory_map(odi_shp, dtype='float32', name=f'odi_anis_tmp{odf_scale}', tmp_dir=tmp_dir)
+    else:
+        odi_pri, odi_sec, odi_anis = (None, None, None)
+
+    # fill output image dictionary
+    odi = dict()
+    odi['odi_pri'] = odi_pri
+    odi['odi_sec'] = odi_sec
+    odi['odi_tot'] = odi_tot
+    odi['odi_anis'] = odi_anis
+
+    return odf, odi, bg_mrtrix, vec_tensor_eigen
 
 
-@njit(cache=True)
-def get_sph_harm_norm_factors(degrees):
+def mask_orientation_dispersion(vec_tensor_eigen, odi):
     """
-    Estimate the normalization factors of the real spherical harmonics series
-    expansion.
+    Suppress orientation dispersion background.
 
     Parameters
     ----------
-    degrees: int
-        degrees of the spherical harmonics series expansion
-
-    Returns
-    -------
-    norm_factors: numpy.ndarray (dtype: float)
-        2D array of spherical harmonics normalization factors
-    """
-
-    norm_factors = np.zeros(shape=(degrees + 1, 2 * degrees + 1))
-    for n in range(0, degrees + 1, 2):
-        for m in range(0, n + 1, 1):
-            norm_factors[n, m] = norm_factor(n, m)
-
-    norm_factors = norm_factors[::2]
-
-    return norm_factors
-
-
-def mask_orientation_dispersion(odi_lst, vec_tensor_eigen):
-    """
-    Keep a black background where no fiber orientation vector
-    is available.
-
-    Parameters
-    ----------
-    odi_lst: list
-        list including the ODI maps estimated
-        in compute_orientation_dispersion()
-
     vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         orientation tensor eigenvalues
         computed from an ODF super-voxel
+
+    odi: dict
+        orientation dispersion dictionary
+
+        odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+            array of primary orientation dispersion parameters
+
+        odi_sec: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+            array of secondary orientation dispersion parameters
+
+        odi_tot: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+            array of total orientation dispersion parameters
+
+        odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+            array of orientation dispersion anisotropy parameters
 
     Returns
     -------
     None
     """
-
+    # mask background
     bg_msk = np.all(vec_tensor_eigen == 0, axis=-1)
-
-    for odi in odi_lst:
-        if odi is not None:
-            odi[bg_msk] = 0
-
-
-@njit(cache=True)
-def norm_factor(n, m):
-    """
-    Compute the normalization factor of the term of degree n and order m
-    of the real-valued spherical harmonics series expansion.
-
-    Parameters
-    ----------
-    n: int
-        degree index
-
-    m: int
-        order index
-
-    Returns
-    -------
-    nf: float
-        normalization factor
-    """
-
-    if m == 0:
-        nf = np.sqrt((2 * n + 1) / (4 * np.pi))
-    else:
-        nf = (-1)**m * np.sqrt(2) * np.sqrt(((2 * n + 1) / (4 * np.pi) *
-                                             (factorial(n - np.abs(m)) / factorial(n + np.abs(m)))))
-
-    return nf
-
-
-@njit(cache=True)
-def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm):
-    if order == -2:
-        return norm[2] * 3 * sin_theta**2 * np.sin(2 * phi)
-    elif order == -1:
-        return norm[1] * 3 * sin_theta * cos_theta * np.sin(phi)
-    elif order == 0:
-        return norm[0] * 0.5 * (3 * cos_theta ** 2 - 1)
-    elif order == 1:
-        return norm[1] * 3 * sin_theta * cos_theta * np.cos(phi)
-    elif order == 2:
-        return norm[2] * 3 * sin_theta**2 * np.cos(2 * phi)
-
-
-@njit(cache=True)
-def sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm):
-    if order == -4:
-        return norm[4] * 105 * sin_theta**4 * np.sin(4 * phi)
-    elif order == -3:
-        return norm[3] * 105 * sin_theta**3 * cos_theta * np.sin(3 * phi)
-    elif order == -2:
-        return norm[2] * 7.5 * sin_theta**2 * (7 * cos_theta ** 2 - 1) * np.sin(2 * phi)
-    elif order == -1:
-        return norm[1] * 2.5 * sin_theta * (7 * cos_theta ** 3 - 3 * cos_theta) * np.sin(phi)
-    elif order == 0:
-        return norm[0] * 0.125 * (35 * cos_theta ** 4 - 30 * cos_theta ** 2 + 3)
-    elif order == 1:
-        return norm[1] * 2.5 * sin_theta * (7 * cos_theta ** 3 - 3 * cos_theta) * np.cos(phi)
-    elif order == 2:
-        return norm[2] * 7.5 * sin_theta**2 * (7 * cos_theta ** 2 - 1) * np.cos(2 * phi)
-    elif order == 3:
-        return norm[3] * 105 * sin_theta**3 * cos_theta * np.cos(3 * phi)
-    elif order == 4:
-        return norm[4] * 105 * sin_theta**4 * np.cos(4 * phi)
-
-
-@njit(cache=True)
-def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm):
-    if order == -6:
-        return norm[6] * 10395 * sin_theta**6 * np.sin(6 * phi)
-    elif order == -5:
-        return norm[5] * 10395 * sin_theta**5 * cos_theta * np.sin(5 * phi)
-    elif order == -4:
-        return norm[4] * 472.5 * sin_theta**4 * (11 * cos_theta ** 2 - 1) * np.sin(4 * phi)
-    elif order == -3:
-        return norm[3] * 157.5 * sin_theta**3 * (11 * cos_theta ** 3 - 3 * cos_theta) * np.sin(3 * phi)
-    elif order == -2:
-        return norm[2] * 13.125 * sin_theta**2 * (33 * cos_theta ** 4 - 18 * cos_theta ** 2 + 1) * np.sin(2 * phi)
-    elif order == -1:
-        return norm[1] * 2.625 * sin_theta \
-            * (33 * cos_theta**5 - 30 * cos_theta**3 + 5 * cos_theta) * np.sin(phi)
-    elif order == 0:
-        return norm[0] * 0.0625 * (231 * cos_theta ** 6 - 315 * cos_theta ** 4 + 105 * cos_theta ** 2 - 5)
-    elif order == 1:
-        return norm[1] * 2.625 * sin_theta \
-            * (33 * cos_theta**5 - 30 * cos_theta**3 + 5 * cos_theta) * np.cos(phi)
-    elif order == 2:
-        return norm[2] * 13.125 * sin_theta**2 * (33 * cos_theta ** 4 - 18 * cos_theta ** 2 + 1) * np.cos(2 * phi)
-    elif order == 3:
-        return norm[3] * 157.5 * sin_theta**3 * (11 * cos_theta ** 3 - 3 * cos_theta) * np.cos(3 * phi)
-    elif order == 4:
-        return norm[4] * 472.5 * sin_theta**4 * (11 * cos_theta ** 2 - 1) * np.cos(4 * phi)
-    elif order == 5:
-        return norm[5] * 10395 * sin_theta**5 * cos_theta * np.cos(5 * phi)
-    elif order == 6:
-        return norm[6] * 10395 * sin_theta**6 * np.cos(6 * phi)
-
-
-@njit(cache=True)
-def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm):
-    if order == -8:
-        return norm[8] * 2027025 * sin_theta**8 * np.sin(8 * phi)
-    elif order == -7:
-        return norm[7] * 2027025 * sin_theta**7 * cos_theta * np.sin(7 * phi)
-    elif order == -6:
-        return norm[6] * 67567.5 * sin_theta**6 * (15 * cos_theta ** 2 - 1) * np.sin(6 * phi)
-    elif order == -5:
-        return norm[5] * 67567.5 * sin_theta**5 * (5 * cos_theta ** 3 - cos_theta) * np.sin(5 * phi)
-    elif order == -4:
-        return norm[4] * 1299.375 * sin_theta**4 * (65 * cos_theta ** 4 - 26 * cos_theta ** 2 + 1) * np.sin(4 * phi)
-    elif order == -3:
-        return norm[3] * 433.125 * sin_theta**3 \
-            * (39 * cos_theta**5 - 26 * cos_theta**3 + 3 * cos_theta) * np.sin(3 * phi)
-    elif order == -2:
-        return norm[2] * 19.6875 * sin_theta**2 \
-            * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.sin(2 * phi)
-    elif order == -1:
-        return norm[1] * 0.5625 * sin_theta \
-            * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.sin(phi)
-    elif order == 0:
-        return norm[0] * 0.0078125 \
-            * (6435 * cos_theta**8 - 12012 * cos_theta**6 + 6930 * cos_theta**4 - 1260 * cos_theta**2 + 35)
-    elif order == 1:
-        return norm[1] * 0.5625 * sin_theta \
-            * (715 * cos_theta**7 - 1001 * cos_theta**5 + 385 * cos_theta**3 - 35 * cos_theta) * np.cos(phi)
-    elif order == 2:
-        return norm[2] * 19.6875 * sin_theta**2 \
-            * (143 * cos_theta**6 - 143 * cos_theta**4 + 33 * cos_theta**2 - 1) * np.cos(2 * phi)
-    elif order == 3:
-        return norm[3] * 433.125 * sin_theta**3 \
-            * (39 * cos_theta**5 - 26 * cos_theta**3 + 3 * cos_theta) * np.cos(3 * phi)
-    elif order == 4:
-        return norm[4] * 1299.375 * sin_theta**4 * (65 * cos_theta ** 4 - 26 * cos_theta ** 2 + 1) * np.cos(4 * phi)
-    elif order == 5:
-        return norm[5] * 67567.5 * sin_theta**5 * (5 * cos_theta ** 3 - cos_theta) * np.cos(5 * phi)
-    elif order == 6:
-        return norm[6] * 67567.5 * sin_theta**6 * (15 * cos_theta ** 2 - 1) * np.cos(6 * phi)
-    elif order == 7:
-        return norm[7] * 2027025 * sin_theta**7 * cos_theta * np.cos(7 * phi)
-    elif order == 8:
-        return norm[8] * 2027025 * sin_theta**8 * np.cos(8 * phi)
-
-
-@njit(cache=True)
-def sph_harm_degree_10(order, phi, sin_theta, cos_theta, norm):
-    if order == -10:
-        return norm[10] * 654729075 * sin_theta**10 * np.sin(10 * phi)
-    elif order == -9:
-        return norm[9] * 654729075 * sin_theta**9 * cos_theta * np.sin(9 * phi)
-    elif order == -8:
-        return norm[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta ** 2 - 1) * np.sin(8 * phi)
-    elif order == -7:
-        return norm[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta ** 3 - 3 * cos_theta) * np.sin(7 * phi)
-    elif order == -6:
-        return norm[6] * 84459.375 * sin_theta**6 \
-            * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.sin(6 * phi)
-    elif order == -5:
-        return norm[5] * 16891.875 * sin_theta**5 \
-            * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.sin(5 * phi)
-    elif order == -4:
-        return norm[4] * 2815.3125 * sin_theta**4 \
-            * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.sin(4 * phi)
-    elif order == -3:
-        return norm[3] * 402.1875 * sin_theta**3 \
-            * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.sin(3 * phi)
-    elif order == -2:
-        return norm[2] * 3.8671875 * sin_theta**2 \
-            * (4199 * cos_theta**8 - 6188 * cos_theta**6 + 2730 * cos_theta**4 - 364 * cos_theta**2 + 7) \
-            * np.sin(2 * phi)
-    elif order == -1:
-        return norm[1] * 0.4296875 * sin_theta \
-            * (4199 * cos_theta**9 - 7956 * cos_theta**7 + 4914 * cos_theta**5 - 1092 * cos_theta**3 + 63 * cos_theta) \
-            * np.sin(phi)
-    elif order == 0:
-        return norm[0] * 0.00390625 \
-            * (46189 * cos_theta**10 - 109395 * cos_theta**8 + 90090 * cos_theta**6
-               - 30030 * cos_theta**4 + 3465 * cos_theta**2 - 63)
-    elif order == 1:
-        return norm[1] * 0.4296875 * sin_theta \
-            * (4199 * cos_theta**9 - 7956 * cos_theta**7 + 4914 * cos_theta**5
-               - 1092 * cos_theta**3 + 63 * cos_theta) * np.cos(phi)
-    elif order == 2:
-        return norm[2] * 3.8671875 * sin_theta**2 \
-            * (4199 * cos_theta**8 - 6188 * cos_theta**6 + 2730 * cos_theta**4 - 364 * cos_theta**2 + 7) \
-            * np.cos(2 * phi)
-    elif order == 3:
-        return norm[3] * 402.1875 * sin_theta**3 \
-            * (323 * cos_theta**7 - 357 * cos_theta**5 + 105 * cos_theta**3 - 7 * cos_theta) * np.cos(3 * phi)
-    elif order == 4:
-        return norm[4] * 2815.3125 * sin_theta**4 \
-            * (323 * cos_theta**6 - 255 * cos_theta**4 + 45 * cos_theta**2 - 1) * np.cos(4 * phi)
-    elif order == 5:
-        return norm[5] * 16891.875 * sin_theta**5 \
-            * (323 * cos_theta**5 - 170 * cos_theta**3 + 15 * cos_theta) * np.cos(5 * phi)
-    elif order == 6:
-        return norm[6] * 84459.375 * sin_theta**6 \
-            * (323 * cos_theta**4 - 102 * cos_theta**2 + 3) * np.cos(6 * phi)
-    elif order == 7:
-        return norm[7] * 5743237.5 * sin_theta**7 * (19 * cos_theta ** 3 - 3 * cos_theta) * np.cos(7 * phi)
-    elif order == 8:
-        return norm[8] * 17229712.5 * sin_theta**8 * (19 * cos_theta ** 2 - 1) * np.cos(8 * phi)
-    elif order == 9:
-        return norm[9] * 654729075 * sin_theta**9 * cos_theta * np.cos(9 * phi)
-    elif order == 10:
-        return norm[10] * 654729075 * sin_theta**10 * np.cos(10 * phi)
+    for key in odi.keys():
+        if odi[key] is not None:
+            odi[key][bg_msk] = 0

@@ -2,8 +2,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage.transform import resize
 
-from foa3d.printing import (print_blur, print_flushed,
-                            print_new_res, print_prepro_heading)
+from foa3d.printing import (print_blur, print_flsh, print_output_res,
+                            print_prepro_heading)
 from foa3d.utils import fwhm_to_sigma
 
 
@@ -34,7 +34,6 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
     px_sz_iso: numpy.ndarray (shape=(3,), dtype=float)
         new isotropic pixel size [μm]
     """
-
     # set the isotropic pixel resolution equal to the z-sampling step
     px_sz_iso = np.max(px_sz) * np.ones(shape=(3,))
 
@@ -65,18 +64,18 @@ def config_anisotropy_correction(px_sz, psf_fwhm):
 
         # print pixel resize info
         if cndt_2:
-            print_new_res(px_sz_iso)
+            print_output_res(px_sz_iso)
         else:
-            print_flushed()
+            print_flsh()
 
     # skip line
     else:
-        print_flushed()
+        print_flsh()
 
     return smooth_sigma, px_sz_iso
 
 
-def correct_image_anisotropy(img, rsz_ratio, sigma=None, pad=None, pad_mode='reflect',
+def correct_anisotropy(img, rsz_ratio, sigma=None, pad=None, pad_mode='reflect',
                              anti_alias=True, trunc=4, ts_msk=None):
     """
     Smooth and downsample the raw microscopy image so as to uniform the lateral sizes

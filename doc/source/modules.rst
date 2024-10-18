@@ -12,4 +12,5 @@ Python module index
    preprocessing
    printing
    slicing
+   spharm
    utils
