@@ -201,18 +201,18 @@ def compute_orientation_dispersion(vec_tensor_eigen, odi_pri, odi_sec, odi_tot, 
 
     # primary dispersion (0.3183098861837907 = 1/π)
     if odi_pri is not None:
-        odi_pri[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k2)).astype(np.float32)
+        odi_pri[:] = (1 - 0.3183098861837907 * np.arctan2(k1, k2)).astype(np.float32)
 
     # secondary dispersion
     if odi_sec is not None:
-        odi_sec[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, k3)).astype(np.float32)
+        odi_sec[:] = (1 - 0.3183098861837907 * np.arctan2(k1, k3)).astype(np.float32)
 
     # dispersion anisotropy
     if odi_anis is not None:
-        odi_anis[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, diff)).astype(np.float32)
+        odi_anis[:] = (1 - 0.3183098861837907 * np.arctan2(k1, diff)).astype(np.float32)
 
     # total dispersion
-    odi_tot[:] = (0.5 - 0.3183098861837907 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3))))).astype(np.float32)
+    odi_tot[:] = (1 - 0.3183098861837907 * np.arctan2(k1, np.sqrt(np.abs(np.multiply(k2, k3))))).astype(np.float32)
 
 
 @njit(cache=True)
