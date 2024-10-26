@@ -196,7 +196,7 @@ def save_frangi_arrays(save_dir, img_name, out_img, px_sz, ram=None):
     print_flsh(f"\nFrangi filter arrays saved to: {save_dir}\n")
 
 
-def save_odf_arrays(save_dir, img_name, odf_scale_um, px_sz, odf, bg, odi_pri, odi_sec, odi_tot, odi_anis):
+def save_odf_arrays(save_dir, img_name, odf_scale_um, px_sz, odf, bg, fbr_dnst, odi_pri, odi_sec, odi_tot, odi_anis):
     """
     Save the output arrays of the ODF analysis stage to TIF and Nifti files.
     Arrays tagged with 'mrtrixview' are preliminarily transformed
@@ -223,6 +223,9 @@ def save_odf_arrays(save_dir, img_name, odf_scale_um, px_sz, odf, bg, odi_pri, o
     bg: NumPy memory-map object (axis order=(X,Y,Z), dtype=uint8)
         background for ODF visualization in MRtrix3
 
+    fbr_dnst: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+        fiber orientation density [1/μm³]
+
     odi_pri: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
         primary orientation dispersion parameter
 
@@ -244,6 +247,9 @@ def save_odf_arrays(save_dir, img_name, odf_scale_um, px_sz, odf, bg, odi_pri, o
     save_array(f'bg_mrtrixview_sv{sbfx}', save_dir, bg, fmt='nii')
     save_array(f'odf_mrtrixview_sv{sbfx}', save_dir, odf, fmt='nii')
 
+    # save fiber density
+    save_array(f'fbr_dnst_sv{sbfx}', save_dir, fbr_dnst, px_sz)
+    
     # save total orientation dispersion
     save_array(f'odi_tot_sv{sbfx}', save_dir, odi_tot, px_sz)
 

@@ -7,7 +7,8 @@ from foa3d.spharm import fiber_vectors_to_sph_harm, get_sph_harm_ncoeff
 from foa3d.utils import create_memory_map, normalize_image, transform_axes
 
 
-def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf_deg=6, vxl_thr=0.5, vec_thr=0.000001):
+def compute_odf_map(fbr_vec, px_sz, odf, odi, fbr_dnst, vec_tensor_eigen, vxl_side, odf_norm,
+                    odf_deg=6, vxl_thr=0.5, vec_thr=0.000001):
     """
     Compute the spherical harmonics coefficients iterating over super-voxels
     of fiber orientation vectors.
@@ -16,6 +17,9 @@ def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf
     ----------
     fbr_vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float)
         fiber orientation vectors
+
+    px_sz: numpy.ndarray (shape=(3,), dtype=float)
+        adjusted isotropic pixel size [μm]
 
     odf: NumPy memory-map object (axis order=(X,Y,Z,C), dtype=float32)
                 initialized array of ODF spherical harmonics coefficients
@@ -34,6 +38,8 @@ def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf
 
             odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
                 orientation dispersion index anisotropy
+
+    fbr_dnst
 
     vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         initialized array of orientation tensor eigenvalues
@@ -74,6 +80,10 @@ def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf
                 zerovec = np.count_nonzero(np.all(vec_vxl == 0, axis=-1))
                 sli_vxl_size = np.prod(vec_vxl.shape[:-1])
 
+                # local fiber density estimate
+                zv, yv, xv = z // vxl_side, y // vxl_side, x // vxl_side
+                fbr_dnst[zv, yv, xv] = (sli_vxl_size - zerovec) / (sli_vxl_size * np.prod(px_sz))
+
                 # skip boundary voxels and voxels without enough non-zero orientation vectors
                 if sli_vxl_size / ref_vxl_size > vxl_thr and 1 - zerovec / sli_vxl_size > vec_thr:
 
@@ -81,7 +91,6 @@ def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf
                     vec_arr = vec_vxl.ravel()
 
                     # compute ODF and orientation tensor eigenvalues
-                    zv, yv, xv = z // vxl_side, y // vxl_side, x // vxl_side
                     odf[zv, yv, xv, :] = fiber_vectors_to_sph_harm(vec_arr, odf_deg, odf_norm)
                     vec_tensor_eigen[zv, yv, xv, :] = compute_vec_tensor_eigen(vec_arr)
 
@@ -94,7 +103,7 @@ def compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, vxl_side, odf_norm, odf
     # transform axes
     odf = transform_axes(odf, swapped=(0, 2), flipped=(1, 2))
 
-    return odf
+    return odf, fbr_dnst
 
 
 @njit(cache=True)
@@ -262,8 +271,11 @@ def init_odf_arrays(vec_img_shp, tmp_dir, odf_scale, odf_deg=6, exp_all=False):
             odi_anis: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
                 initialized array of orientation dispersion anisotropy parameters
 
+    fbr_dnst: NumPy memory-map object (axis order=(Z,Y,X), dtype=float32)
+        initialized fiber density map
+
     bg_mrtrix: NumPy memory-map object (axis order=(X,Y,Z), dtype=uint8)
-                initialized background for ODF visualization in MRtrix3
+        initialized background for ODF visualization in MRtrix3
 
     vec_tensor_eigen: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
         initialized fiber orientation tensor eigenvalues
@@ -285,6 +297,9 @@ def init_odf_arrays(vec_img_shp, tmp_dir, odf_scale, odf_deg=6, exp_all=False):
     vec_tensor_eigen = create_memory_map(vec_tensor_shape, dtype='float32',
                                          name=f'tensor_tmp{odf_scale}', tmp_dir=tmp_dir)
 
+    # fiber density memory map
+    fbr_dnst = create_memory_map(odi_shp, dtype='float32', name=f'fbr_dnst_tmp{odf_scale}', tmp_dir=tmp_dir)
+
     # create ODI memory maps
     odi_tot = create_memory_map(odi_shp, dtype='float32', name=f'odi_tot_tmp{odf_scale}', tmp_dir=tmp_dir)
     if exp_all:
@@ -301,7 +316,7 @@ def init_odf_arrays(vec_img_shp, tmp_dir, odf_scale, odf_deg=6, exp_all=False):
     odi['odi_tot'] = odi_tot
     odi['odi_anis'] = odi_anis
 
-    return odf, odi, bg_mrtrix, vec_tensor_eigen
+    return odf, odi, fbr_dnst, bg_mrtrix, vec_tensor_eigen
 
 
 def mask_orientation_dispersion(vec_tensor_eigen, odi):

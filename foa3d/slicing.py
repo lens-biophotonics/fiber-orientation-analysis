@@ -4,6 +4,7 @@ import numpy as np
 import psutil
 
 from numba import njit
+from foa3d.printing import print_flsh
 from foa3d.utils import get_available_cores
 
 
@@ -523,41 +524,40 @@ def generate_slice_lists(in_slc_shp, img_shp, batch_sz, px_rsz_ratio, ovlp=0, ms
     slc_per_dim = np.floor(np.divide(img_shp, in_slc_shp)).astype(int)
 
     # initialize empty range lists
-    in_pad_lst = list()
-    in_rng_lst = list()
-    bc_rng_lst = list()
-    out_rng_lst = list()
-    for z, y, x in product(range(slc_per_dim[0]), range(slc_per_dim[1]), range(slc_per_dim[2])):
+    # fill slice range dictionary
+    slc_rng = dict()
+    slc_rng['in_rng'] = list()
+    slc_rng['in_pad'] = list()
+    slc_rng['out_rng'] = list()
+    slc_rng['bc_rng'] = list()
+    tot_slc = np.prod(slc_per_dim)
+    for i, zyx in enumerate(product(range(slc_per_dim[0]), range(slc_per_dim[1]), range(slc_per_dim[2]))):
 
         # index ranges of analyzed image slices (with padding)
-        in_rng, pad = compute_slice_range((z, y, x), in_slc_shp, img_shp, slc_per_dim, ovlp=ovlp)
-        in_rng_lst.append(in_rng)
-        in_pad_lst.append(pad)
+        in_rng, pad = compute_slice_range(zyx, in_slc_shp, img_shp, slc_per_dim, ovlp=ovlp)
+        slc_rng['in_rng'].append(in_rng)
+        slc_rng['in_pad'].append(pad)
 
         # output index ranges
-        out_rng, _ = compute_slice_range((z, y, x), out_slc_shp, out_img_shp, slc_per_dim)
-        out_rng_lst.append(out_rng)
+        out_rng, _ = compute_slice_range(zyx, out_slc_shp, out_img_shp, slc_per_dim)
+        slc_rng['out_rng'].append(out_rng)
 
         # (optional) neuronal body channel
         if msk_bc:
-            bc_rng, _ = compute_slice_range((z, y, x), in_slc_shp, img_shp, slc_per_dim)
-            bc_rng_lst.append(bc_rng)
+            bc_rng, _ = compute_slice_range(zyx, in_slc_shp, img_shp, slc_per_dim)
+            slc_rng['bc_rng'].append(bc_rng)
         else:
-            bc_rng_lst.append(None)
+            slc_rng['bc_rng'].append(None)
+
+        # show progress
+        print_flsh(f"Generating image slice ranges:\t{100 * (i+1) / tot_slc:.1f}%", end='\r')
 
     # total number of slices
-    tot_slc = len(in_rng_lst)
+    tot_slc = len(slc_rng['in_rng'])
 
     # adjust slice batch size
     if batch_sz > tot_slc:
         batch_sz = tot_slc
-
-    # fill slice range dictionary
-    slc_rng = dict()
-    slc_rng['in_rng'] = in_rng_lst
-    slc_rng['in_pad'] = in_pad_lst
-    slc_rng['out_rng'] = out_rng_lst
-    slc_rng['bc_rng'] = bc_rng_lst
 
     return slc_rng, out_slc_shp, tot_slc, batch_sz
 

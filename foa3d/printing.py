@@ -35,7 +35,7 @@ def color_text(r, g, b, text):
     return clr_text
 
 
-def print_flsh(string_to_print=""):
+def print_flsh(string_to_print="", end='\n'):
     """
     Print string and flush output data buffer.
 
@@ -44,11 +44,14 @@ def print_flsh(string_to_print=""):
     string_to_print: str
         string to be printed
 
+    end: str
+        string appended after the last value, default a newline
+
     Returns
     -------
     None
     """
-    print(string_to_print, flush=True)
+    print(string_to_print, flush=True, end=end)
 
 
 def print_blur(sigma_um, psf_fwhm):
@@ -184,7 +187,7 @@ def print_frangi_info(in_img, frangi_cfg, in_slc_shp_um, tot_slc_num):
     if gamma is None:
         gamma = 'auto'
 
-    print_flsh(color_text(0, 191, 255, "\n3D Frangi Filter\n") + "\nSensitivity\n" +
+    print_flsh(color_text(0, 191, 255, "\n\n\n3D Frangi Filter\n") + "\nSensitivity\n" +
                f"• plate-like \u03B1: {alpha:.1e}\n• blob-like  \u03B2: {beta:.1e}\n• background \u03B3: {gamma}\n\n" +
                f"Enhanced scales      [μm]: {scales_um}\nEnhanced diameters   [μm]: {4 * scales_um}\n")
 
@@ -223,7 +226,7 @@ def print_frangi_progress(info, is_valid, verbose=1):
         prog_prc = 100 * slc_cnt / tot_slc
         _, hrs, mins, secs = elapsed_time(start_time)
         print_flsh(f"[Parallel(n_jobs={batch_sz})]:\t{slc_cnt}/{tot_slc} done\t|\t" +
-                   f"elapsed: {hrs} hrs {mins} min {int(secs)} s\t{prog_prc}%")
+                   f"elapsed: {hrs} hrs {mins} min {int(secs)} s\t{prog_prc:.1f}%")
 
 
 def print_image_info(in_img):
@@ -292,8 +295,8 @@ def print_odf_info(odf_scales_um, odf_degrees):
     None
     """
     print_flsh(
-        color_text(0, 191, 255,
-                   f"\n3D ODF Analysis\n\nResolution   [μm]: {odf_scales_um}\nExpansion degrees: {odf_degrees}\n"))
+        color_text(0, 191, 255, "\n3D ODF Analysis") +
+        f"\n\nResolution   [μm]: {odf_scales_um}\nExpansion degrees: {odf_degrees}\n")
 
 
 def print_output_res(px_sz_iso):

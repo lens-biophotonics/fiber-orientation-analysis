@@ -633,14 +633,14 @@ def odf_analysis(fbr_vec, iso_fbr, px_sz, save_dirs, img_name, odf_scale_um, odf
     odf_scale = int(np.ceil(odf_scale_um / px_sz[0]))
 
     # initialize ODF analysis output arrays
-    odf, odi, bg_mrtrix, vec_tensor_eigen = \
+    odf, odi, dnst, bg_mrtrix, vec_tensor_eigen = \
         init_odf_arrays(fbr_vec.shape[:-1], save_dirs['tmp'], odf_scale=odf_scale, odf_deg=odf_deg, exp_all=exp_all)
 
     # generate downsampled background for MRtrix3 mrview
     generate_odf_background(bg_mrtrix, fbr_vec, vxl_side=odf_scale, iso_fbr=iso_fbr)
 
     # compute ODF coefficients
-    odf = compute_odf_map(fbr_vec, odf, odi, vec_tensor_eigen, odf_scale, odf_norm, odf_deg=odf_deg)
+    odf, dnst = compute_odf_map(fbr_vec, px_sz, odf, odi, dnst, vec_tensor_eigen, odf_scale, odf_norm, odf_deg=odf_deg)
 
     # save memory maps to TIFF or NIfTI files
-    save_odf_arrays(save_dirs['odf'], img_name, odf_scale_um, px_sz, odf, bg_mrtrix, **odi)
+    save_odf_arrays(save_dirs['odf'], img_name, odf_scale_um, px_sz, odf, bg_mrtrix, dnst, **odi)
