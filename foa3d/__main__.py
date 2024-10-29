@@ -16,7 +16,7 @@ def foa3d(cli_args):
     parallel_odf_over_scales(cli_args, save_dirs, out_img['vec'], out_img['iso'], out_img['px_sz'], in_img['name'])
 
     # delete temporary folder
-    delete_tmp_folder(save_dirs['tmp'])
+    delete_tmp_folder(save_dirs['tmp'], (in_img, out_img))
 
 
 def main():

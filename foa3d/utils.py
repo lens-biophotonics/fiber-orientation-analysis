@@ -182,7 +182,7 @@ def get_item_size(dtype):
     return item_sz
 
 
-def delete_tmp_folder(tmp_dir):
+def delete_tmp_folder(tmp_dir, tmp_data):
     """
     Delete temporary folder.
 
@@ -190,13 +190,21 @@ def delete_tmp_folder(tmp_dir):
     ----------
     tmp_dir: str
         path to temporary folder to be removed
+    
+    tmp_data: tuple
+        temporary data dictionaries
 
     Returns
     -------
     None
     """
     try:
+        for data in tmp_data:
+            for k in list(data.keys()):
+                del data[k]
+
         rmtree(tmp_dir)
+
     except OSError:
         pass
 

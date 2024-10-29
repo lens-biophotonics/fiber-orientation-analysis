@@ -246,21 +246,28 @@ def save_odf_arrays(save_dir, img_name, odf_scale_um, px_sz, odf, bg, fbr_dnst, 
     sbfx = f'{odf_scale_um}_{img_name}'
     save_array(f'bg_mrtrixview_sv{sbfx}', save_dir, bg, fmt='nii')
     save_array(f'odf_mrtrixview_sv{sbfx}', save_dir, odf, fmt='nii')
+    del bg
+    del odf
 
     # save fiber density
     save_array(f'fbr_dnst_sv{sbfx}', save_dir, fbr_dnst, px_sz)
-    
+    del fbr_dnst
+
     # save total orientation dispersion
     save_array(f'odi_tot_sv{sbfx}', save_dir, odi_tot, px_sz)
+    del odi_tot
 
     # save primary orientation dispersion
     if odi_pri is not None:
         save_array(f'odi_pri_sv{sbfx}', save_dir, odi_pri, px_sz)
+        del odi_pri
 
     # save secondary orientation dispersion
     if odi_sec is not None:
         save_array(f'odi_sec_sv{sbfx}', save_dir, odi_sec, px_sz)
+        del odi_sec
 
     # save orientation dispersion anisotropy
     if odi_anis is not None:
         save_array(f'odi_anis_sv{sbfx}', save_dir, odi_anis, px_sz)
+        del odi_anis
