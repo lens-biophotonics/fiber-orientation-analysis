@@ -118,12 +118,13 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', ram=None):
         # retrieve image pixel size
         px_sz_z, px_sz_y, px_sz_x = px_sz
 
-        # adjust metadata
-        metadata = {'spacing': px_sz_z, 'unit': 'um'} if nd_array.ndim == 4 \
-            else {'axes': 'ZYX', 'spacing': px_sz_z, 'unit': 'um'}
+        # adjust axes (for correct visualization in Fiji)
+        if nd_array.ndim == 3:
+            nd_array = np.expand_dims(nd_array, 1)
 
         # adjust bigtiff optional argument
         bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
+        metadata = {'axes': 'ZCYX', 'spacing': px_sz_z, 'unit': 'um'}
         out_name = f'{fname}.{fmt}'
         with TiffWriter(path.join(save_dir, out_name), bigtiff=bigtiff, append=True) as tif:
             for z in range(nz):
