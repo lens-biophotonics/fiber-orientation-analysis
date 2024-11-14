@@ -2,7 +2,6 @@
 from itertools import combinations_with_replacement
 
 import numpy as np
-from joblib import Parallel, delayed
 from scipy import ndimage as ndi
 
 from foa3d.utils import (create_background_mask, create_memory_map,
@@ -11,9 +10,9 @@ from foa3d.utils import (create_background_mask, create_memory_map,
 
 def analyze_hessian_eigen(img, sigma, trunc=4):
     """
-    Return the eigenvalues of the local Hessian matrices
+    Compute the eigenvalues of local Hessian matrices
     of the input image array, sorted by absolute value (in ascending order),
-    along with the related eigenvectors.
+    along with the related (dominant) eigenvectors.
 
     Parameters
     ----------
@@ -28,26 +27,22 @@ def analyze_hessian_eigen(img, sigma, trunc=4):
 
     Returns
     -------
-    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    eigval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
 
-    dom_eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    dom_eigvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvectors related to the dominant (minimum) eigenvalue
     """
-    # compute scaled Hessian matrices
     hessian = compute_scaled_hessian(img, sigma=sigma, trunc=trunc)
+    eigval, dom_eigvec = compute_dominant_eigen(hessian)
 
-    # compute Hessian eigenvalues and orientation vectors
-    # related to the dominant one
-    eigenval, dom_eigenvec = compute_dominant_eigen(hessian)
-
-    return eigenval, dom_eigenvec
+    return eigval, dom_eigvec
 
 
 def compute_dominant_eigen(hessian):
     """
     Compute the eigenvalues (sorted by absolute value)
-    of the symmetrical Hessian matrix.
+    of symmetrical Hessian matrix, selecting the eigenvectors related to the dominant ones.
 
     Parameters
     ----------
@@ -56,21 +51,17 @@ def compute_dominant_eigen(hessian):
 
     Returns
     -------
-    sorted_eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    srt_eigval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
 
-    dom_eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    dom_eigvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvectors related to the dominant (minimum) eigenvalue
     """
-    # compute and sort the eigenvalues/eigenvectors
-    # of the image Hessian matrices
     eigenval, eigenvec = np.linalg.eigh(hessian)
-    sorted_eigenval, sorted_eigenvec = sort_eigen(eigenval, eigenvec)
+    srt_eigval, srt_eigvec = sort_eigen(eigenval, eigenvec)
+    dom_eigvec = srt_eigvec[..., 0]
 
-    # select the eigenvectors related to dominant eigenvalues
-    dom_eigenvec = sorted_eigenvec[..., 0]
-
-    return sorted_eigenval, dom_eigenvec
+    return srt_eigval, dom_eigvec
 
 
 def compute_fractional_anisotropy(eigenval):
@@ -244,7 +235,7 @@ def compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha, beta, gamma):
     return vesselness
 
 
-def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, dark=False):
+def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None):
     """
     Compute fiber orientation vectors at the input spatial scale of interest
 
@@ -265,104 +256,78 @@ def compute_scaled_orientation(scale_px, img, alpha=0.001, beta=1, gamma=None, d
     gamma: float
         background score sensitivity
 
-    dark: bool
-        if True, enhance black 3D tubular structures
-        (i.e., negative contrast polarity)
-
     Returns
     -------
     frangi_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         Frangi's vesselness likelihood image
 
-    eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    eigvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         3D orientation map at the input spatial scale
 
-    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    eigval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         Hessian eigenvalues sorted by absolute value (ascending order)
     """
-    # Hessian matrix estimation and eigenvalue decomposition
-    eigenval, eigenvec = analyze_hessian_eigen(img, scale_px)
+    # compute local Hessian matrices and perform eigenvalue decomposition
+    eigval, eigvec = analyze_hessian_eigen(img, scale_px)
 
-    # compute Frangi's vesselness probability
-    eigen1, eigen2, eigen3 = eigenval
+    # compute Frangi's vesselness probability image
+    eigen1, eigen2, eigen3 = eigval
     vesselness = compute_scaled_vesselness(eigen1, eigen2, eigen3, alpha=alpha, beta=beta, gamma=gamma)
+    frangi_img = reject_vesselness_background(vesselness, eigen2, eigen3)
+    eigval = np.stack(eigval, axis=-1)
 
-    # reject vesselness background
-    frangi_img = reject_vesselness_background(vesselness, eigen2, eigen3, dark)
-
-    # stack eigenvalues list
-    eigenval = np.stack(eigenval, axis=-1)
-
-    return frangi_img, eigenvec, eigenval
+    return frangi_img, eigvec, eigval
 
 
-def compute_parall_scaled_orientation(scales_px, img, alpha=0.001, beta=1, gamma=None, dark=False):
+def init_frangi_arrays(in_img, cfg, tmp_dir):
     """
-    Compute fiber orientation vectors over the spatial scales of interest using concurrent workers.
+    Initialize the output datasets of the Frangi filter stage.
 
     Parameters
     ----------
-    scales_px: numpy.ndarray (dtype=float)
-        Frangi filter scales [px]
+    in_img: dict
+        input image dictionary
 
-    img: numpy.ndarray (axis order=(Z,Y,X))
-        3D microscopy image
+            data: numpy.ndarray (axis order=(Z,Y,X) or (Z,Y,X,C) or (Z,C,Y,X))
+                3D microscopy image
 
-    alpha: float
-        plate-like score sensitivity
+            ts_msk: numpy.ndarray (dtype=bool)
+                tissue reconstruction binary mask
 
-    beta: float
-        blob-like score sensitivity
+            ch_ax: int
+                RGB image channel axis (either 1, 3, or None for grayscale images)
 
-    gamma: float
-        background score sensitivity
+            fb_ch: int
+                neuronal fibers channel
 
-    dark: bool
-        if True, enhance black 3D tubular structures
-        (i.e., negative contrast polarity)
+            bc_ch: int
+                brain cell soma channel
 
-    Returns
-    -------
-    frangi_img: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
-        Frangi's vesselness likelihood image
+            msk_bc: bool
+                if True, mask neuronal bodies within
+                the optionally provided channel
 
-    eigenvec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
-        3D orientation map at the input spatial scale
+            psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
+                3D FWHM of the PSF [μm]
 
-    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
-        Hessian eigenvalues sorted by absolute value (ascending order)
-    """
-    n_scales = len(scales_px)
-    with Parallel(n_jobs=n_scales, prefer='threads', require='sharedmem') as parallel:
-        par_res = parallel(
-                    delayed(compute_scaled_orientation)(
-                        scales_px[i], img=img,
-                        alpha=alpha, beta=beta, gamma=gamma, dark=dark) for i in range(n_scales))
+            px_sz: numpy.ndarray (shape=(3,), dtype=float)
+                pixel size [μm]
 
-        # unpack and stack results
-        enh_img_tpl, eigenvec_tpl, eigenval_tpl = zip(*par_res)
-        eigenval = np.stack(eigenval_tpl, axis=0)
-        eigenvec = np.stack(eigenvec_tpl, axis=0)
-        frangi = np.stack(enh_img_tpl, axis=0)
+            name: str
+                name of the 3D microscopy image
 
-        # get max scale-wise vesselness
-        best_idx = np.expand_dims(np.argmax(frangi, axis=0), axis=0)
-        frangi = np.take_along_axis(frangi, best_idx, axis=0).squeeze(axis=0)
+            is_vec: bool
+                vector field flag
 
-        # select fiber orientation vectors (and the associated eigenvalues) among different scales
-        best_idx = np.expand_dims(best_idx, axis=-1)
-        eigenval = np.take_along_axis(eigenval, best_idx, axis=0).squeeze(axis=0)
-        fbr_vec = np.take_along_axis(eigenvec, best_idx, axis=0).squeeze(axis=0)
+            shape: numpy.ndarray (shape=(3,), dtype=int)
+                total image shape
 
-    return frangi, fbr_vec, eigenval
+            shape_um: numpy.ndarray (shape=(3,), dtype=float)
+                total image shape [μm]
 
+            item_sz: int
+                image item size [B]
 
-def init_frangi_arrays(cfg, img_shp, slc_shp, rsz_ratio, tmp_dir, msk_bc=False):
-    """
-    Initialize the output datasets of the Frangi filtering stage.
-
-    Parameters
-    ----------
     cfg: dict
         Frangi filter configuration
 
@@ -387,9 +352,6 @@ def init_frangi_arrays(cfg, img_shp, slc_shp, rsz_ratio, tmp_dir, msk_bc=False):
             px_sz: numpy.ndarray (shape=(3,), dtype=float)
                 pixel size [μm]
 
-            z_rng: int
-                output z-range in [px]
-
             bc_ch: int
                 neuronal bodies channel
 
@@ -406,102 +368,70 @@ def init_frangi_arrays(cfg, img_shp, slc_shp, rsz_ratio, tmp_dir, msk_bc=False):
             exp_all: bool
                 export all images
 
-    img_shp: numpy.ndarray (shape=(3,), dtype=int)
-        3D image shape [px]
-
-    slc_shp: numpy.ndarray (shape=(3,), dtype=int)
-        shape of the basic image slices
-        analyzed using parallel threads [px]
-
-    rsz_ratio: numpy.ndarray (shape=(3,), dtype=float)
-        3D image resize ratio
-
     tmp_dir: str
-        temporary file directory
-
-    msk_bc: bool
-        if True, mask neuronal bodies
-        in the optionally provided image channel
+        path to temporary folder
 
     Returns
     -------
     out_img: dict
         output image dictionary
 
-        vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
-            initialized fiber orientation 3D image
+            vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float32)
+                initialized fiber orientation 3D image
 
-        clr: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=uint8)
-            initialized orientation colormap image
+            clr: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
+                initialized orientation colormap image
 
-        fa: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-            initialized fractional anisotropy image
+            fa: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                initialized fractional anisotropy image
 
-        frangi: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-            initialized Frangi-enhanced image
+            frangi: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                initialized Frangi-enhanced image
 
-        iso: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-            initialized fiber image (isotropic resolution)
+            iso: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                initialized fiber image (isotropic resolution)
 
-        fbr_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-            initialized fiber mask image
+            fbr_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                initialized fiber mask image
 
-        bc_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-            initialized soma mask image
-
-    z_sel: NumPy slice object
-        selected z-depth range
+            bc_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                initialized soma mask image
     """
-    # shape copies
-    img_shp = img_shp.copy()
-    slc_shp = slc_shp.copy()
-
-    # adapt output z-axis shape if required
-    z_min, z_max = cfg['z_rng']
-    if z_min != 0 or z_max is not None:
-        if z_max is None:
-            z_max = slc_shp[0]
-        img_shp[0] = z_max - z_min
-    z_sel = slice(z_min, z_max, 1)
-
     # output shape
-    img_dims = len(img_shp)
+    img_shp = in_img['shape'].copy()
+    img_shp[0] = cfg['z_out'].stop - cfg['z_out'].start
+    rsz_ratio = np.divide(in_img['px_sz'], cfg['px_sz'])
     tot_shp = tuple(np.ceil(rsz_ratio * img_shp).astype(int))
+    vec_shp = tot_shp + (len(img_shp),)
+    cfg.update({'rsz': rsz_ratio})
 
     # fiber channel arrays
-    iso_fbr_img = create_memory_map(tot_shp, dtype='uint8', name='iso_fiber', tmp_dir=tmp_dir)
+    iso_fbr = create_memory_map(tot_shp, dtype='uint8', name='iso', tmp=tmp_dir)
     if cfg['exp_all']:
-        frangi_img = create_memory_map(tot_shp, dtype='uint8', name='frangi', tmp_dir=tmp_dir)
-        fbr_msk = create_memory_map(tot_shp, dtype='uint8', name='fbr_msk', tmp_dir=tmp_dir)
-        fa_img = create_memory_map(tot_shp, dtype='float32', name='fa', tmp_dir=tmp_dir)
+        frangi = create_memory_map(tot_shp, dtype='uint8', name='frangi', tmp=tmp_dir)
+        fbr_msk = create_memory_map(tot_shp, dtype='uint8', name='fbr_msk', tmp=tmp_dir)
+        fa = create_memory_map(tot_shp, dtype='float32', name='fa', tmp=tmp_dir)
 
         # soma channel array
-        if msk_bc:
-            bc_msk = create_memory_map(tot_shp, dtype='uint8', name='bc_msk', tmp_dir=tmp_dir)
+        if in_img['msk_bc']:
+            bc_msk = create_memory_map(tot_shp, dtype='uint8', name='bc_msk', tmp=tmp_dir)
         else:
             bc_msk = None
     else:
-        frangi_img, fbr_msk, fa_img, bc_msk = (None, None, None, None)
+        frangi, fbr_msk, fa, bc_msk = 4 * (None,)
 
     # fiber orientation arrays
-    vec_shape = tot_shp + (img_dims,)
-    fbr_vec_img = create_memory_map(vec_shape, dtype='float32', name='fiber_vec', tmp_dir=tmp_dir)
-    fbr_vec_clr = create_memory_map(vec_shape, dtype='uint8', name='fiber_cmap', tmp_dir=tmp_dir)
+    fbr_vec = create_memory_map(vec_shp, dtype='float32', name='vec', tmp=tmp_dir)
+    fbr_clr = create_memory_map(vec_shp, dtype='uint8', name='clr', tmp=tmp_dir)
 
     # fill output image dictionary
-    out_img = dict()
-    out_img['vec'] = fbr_vec_img
-    out_img['clr'] = fbr_vec_clr
-    out_img['fa'] = fa_img
-    out_img['frangi'] = frangi_img
-    out_img['iso'] = iso_fbr_img
-    out_img['fbr_msk'] = fbr_msk
-    out_img['bc_msk'] = bc_msk
+    out_img = {'vec': fbr_vec, 'clr': fbr_clr, 'fa': fa, 'frangi': frangi,
+               'iso': iso_fbr, 'fbr_msk': fbr_msk, 'bc_msk': bc_msk, 'px_sz': cfg['px_sz']}
 
-    return out_img, z_sel
+    return out_img
 
 
-def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=False, hsv=False):
+def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, hsv=False, _fa=False):
     """
     Apply 3D Frangi filter to 3D microscopy image.
 
@@ -522,74 +452,95 @@ def frangi_filter(img, scales_px=1, alpha=0.001, beta=1.0, gamma=None, dark=Fals
     gamma: float
         background score sensitivity (if None, gamma is automatically tailored)
 
-    dark: bool
-        if True, enhance black 3D tubular structures
-        (i.e., negative contrast polarity)
-
     hsv: bool
+        generate an HSV colormap of 3D fiber orientations
+
+    _fa: bool
+        compute fractional anisotropy
 
     Returns
     -------
-    orient_slc: dict
-        slice orientation dictionary
+    out_slc: dict
+        slice output data
 
-        vec_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
-            3D fiber orientation field
+            vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+                3D fiber orientation field
 
-        clr_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
-            orientation colormap image
+            clr: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
+                orientation colormap image
 
-        fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
-            fractional anisotropy image
+            fa: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fractional anisotropy image
 
-    frangi: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
-        Frangi's vesselness likelihood image
+            frangi: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
+                Frangi's vesselness likelihood image
     """
-    # single-scale vesselness analysis
-    if len(scales_px) == 1:
-        frangi, fbr_vec, eigenval = \
-            compute_scaled_orientation(scales_px[0], img, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+    # single-scale or parallel multi-scale vesselness analysis
+    ns = len(scales_px)
+    frangi = np.zeros((ns,) + img.shape, dtype='float32')
+    eigvec = np.zeros((ns,) + img.shape + (3,), dtype='float32')
+    eigval = np.zeros((ns,) + img.shape + (3,), dtype='float32')
+    for s in range(ns):
+        frangi[s], eigvec[s], eigval[s] = \
+            compute_scaled_orientation(scales_px[s], img, alpha=alpha, beta=beta, gamma=gamma)
 
-    # parallel scaled vesselness analysis
-    else:
-        frangi, fbr_vec, eigenval = \
-            compute_parall_scaled_orientation(scales_px, img, alpha=alpha, beta=beta, gamma=gamma, dark=dark)
+    # get maximum response across the requested scales
+    max_idx = np.expand_dims(np.argmax(frangi, axis=0), axis=0)
+    frangi = np.take_along_axis(frangi, max_idx, axis=0).squeeze(axis=0)
 
-    # generate fractional anisotropy image
-    fa = compute_fractional_anisotropy(eigenval)
+    # select fiber orientation vectors (and the associated eigenvalues) among different scales
+    max_idx = np.expand_dims(max_idx, axis=-1)
+    eigval = np.take_along_axis(eigval, max_idx, axis=0).squeeze(axis=0)
+    fbr_vec = np.take_along_axis(eigvec, max_idx, axis=0).squeeze(axis=0)
 
-    # generate fiber orientation color map
+    # compute fractional anisotropy image and fiber orientation color map
+    fa = compute_fractional_anisotropy(eigval) if _fa else None
     fbr_clr = hsv_orient_cmap(fbr_vec) if hsv else rgb_orient_cmap(fbr_vec)
 
-    # fill orientation dictionary
-    orient_slc = dict()
-    orient_slc['vec_slc'] = fbr_vec
-    orient_slc['clr_slc'] = fbr_clr
-    orient_slc['fa_slc'] = fa
+    # fill slice output dictionary
+    out_slc = {'vec': fbr_vec, 'clr': fbr_clr, 'fa': fa, 'frangi': frangi}
 
-    return orient_slc, frangi
+    return out_slc
 
 
-def mask_background(img, orient, method='yen', invert=False, ts_msk=None):
+def mask_background(out_slc, ref_img=None, method='yen', invert=False, ornt_keys=('vec', 'clr', 'fa')):
     """
-    Mask fiber orientation arrays.
+    Mask fiber orientation data arrays.
 
     Parameters
     ----------
-    img: numpy.ndarray (axis order=(Z,Y,X))
-        fiber (or neuron) fluorescence 3D image
+    out_slc: dict
+        slice output dictionary
 
-    orient: dict
-        slice orientation dictionary
+            vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+                3D fiber orientation field
 
-            vec_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
-                fiber orientation vector slice
+            clr: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
+                orientation colormap
 
-            clr_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
-                orientation colormap slice
+            fa: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fractional anisotropy
 
-            fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
-                fractional anisotropy slice
+            frangi: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                Frangi-enhanced image slice (fiber probability image)
+
+            iso: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                isotropic fiber image slice
+
+            ts_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                tissue mask slice
+
+            fbr_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fiber mask slice
+
+            bc_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
+                brain cell mask slice
+
+            rng: NumPy slice object
+                output range
+
+    ref_img: numpy.ndarray (axis order=(Z,Y,X)
+        reference image used for thresholding
 
     method: str
         thresholding method (refer to skimage.filters)
@@ -597,48 +548,41 @@ def mask_background(img, orient, method='yen', invert=False, ts_msk=None):
     invert: bool
         mask inversion flag
 
-    ts_msk: numpy.ndarray (dtype=bool)
-        tissue reconstruction binary mask
+    ornt_keys: tuple
+        fiber orientation data keys
 
     Returns
     -------
-    orient: dict
-        (masked) slice orientation dictionary
-
-            vec_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
-                fiber orientation vector slice (masked)
-
-            clr_slc: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
-                orientation colormap slice (masked)
-
-            fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
-                fractional anisotropy slice (masked)
+    out_slc: dict
 
     bg: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
         background mask
     """
     # generate background mask
-    bg = create_background_mask(img, method=method)
+    if ref_img is None:
+        ref_img = out_slc['frangi']
+    bg = create_background_mask(ref_img, method=method)
 
     # apply tissue reconstruction mask, when provided
-    if ts_msk is not None:
-        bg = np.logical_or(bg, np.logical_not(ts_msk))
+    if out_slc['ts_msk'] is not None:
+        bg = np.logical_or(bg, np.logical_not(out_slc['ts_msk']))
 
     # invert mask
     if invert:
         bg = np.logical_not(bg)
 
     # apply mask to input orientation data dictionary
-    for key in orient.keys():
-        if orient[key].ndim == 3:
-            orient[key][bg] = 0
-        else:
-            orient[key][bg, :] = 0
+    for key in out_slc.keys():
+        if key in ornt_keys and out_slc[key] is not None:
+            if out_slc[key].ndim == 3:
+                out_slc[key][bg] = 0
+            else:
+                out_slc[key][bg, :] = 0
 
-    return orient, bg
+    return out_slc, bg
 
 
-def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
+def reject_vesselness_background(vesselness, eigen2, eigen3):
     """
     Reject the fiber background, exploiting the sign of the "secondary"
     eigenvalues λ2 and λ3.
@@ -654,33 +598,28 @@ def reject_vesselness_background(vesselness, eigen2, eigen3, dark):
     eigen3: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         highest Hessian eigenvalue
 
-    dark: bool
-        if True, enhance black 3D tubular structures
-        (i.e., negative contrast polarity)
-
     Returns
     -------
     vesselness: numpy.ndarray (axis order=(Z,Y,X), dtype=float)
         masked Frangi's vesselness likelihood image
     """
-    bg_msk = np.logical_or(eigen2 < 0, eigen3 < 0) if dark else np.logical_or(eigen2 > 0, eigen3 > 0)
-    bg_msk = np.logical_or(bg_msk, np.isnan(vesselness))
+    bg_msk = np.logical_or(np.logical_or(eigen2 > 0, eigen3 > 0), np.isnan(vesselness))
     vesselness[bg_msk] = 0
 
     return vesselness
 
 
-def sort_eigen(eigenval, eigenvec, axis=-1):
+def sort_eigen(eigval, eigvec, axis=-1):
     """
     Sort eigenvalue and related eigenvector arrays
     by absolute value along the given axis.
 
     Parameters
     ----------
-    eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    eigval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         original eigenvalue array
 
-    eigenvec: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
+    eigvec: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
         original eigenvector array
 
     axis: int
@@ -688,102 +627,111 @@ def sort_eigen(eigenval, eigenvec, axis=-1):
 
     Returns
     -------
-    sorted_eigenval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+    srt_eigval: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
         sorted eigenvalue array (ascending order)
 
-    sorted_eigenvec: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
+    srt_eigvec: numpy.ndarray (axis order=(Z,Y,X,C,C), dtype=float)
         sorted eigenvector array
     """
     # sort the eigenvalue array by absolute value (ascending order)
-    sorted_val_index = np.abs(eigenval).argsort(axis)
-    sorted_eigenval = np.take_along_axis(eigenval, sorted_val_index, axis)
-    sorted_eigenval = [np.squeeze(eigenval, axis=axis)
-                       for eigenval in np.split(sorted_eigenval, sorted_eigenval.shape[axis], axis=axis)]
+    srt_val_idx = np.abs(eigval).argsort(axis)
+    srt_eigval = np.take_along_axis(eigval, srt_val_idx, axis)
+    srt_eigval = [np.squeeze(eigval, axis=axis) for eigval in np.split(srt_eigval, srt_eigval.shape[axis], axis=axis)]
 
-    # sort eigenvectors consistently
-    sorted_vec_index = sorted_val_index[:, :, :, np.newaxis, :]
-    sorted_eigenvec = np.take_along_axis(eigenvec, sorted_vec_index, axis)
+    # sort related eigenvectors consistently
+    srt_vec_idx = srt_val_idx[:, :, :, np.newaxis, :]
+    srt_eigvec = np.take_along_axis(eigvec, srt_vec_idx, axis)
 
-    return sorted_eigenval, sorted_eigenvec
+    return srt_eigval, srt_eigvec
 
 
-def write_frangi_arrays(out_rng, z_sel, iso_slc, frangi_slc, fbr_msk_slc, bc_msk_slc, vec_slc, clr_slc, fa_slc,
-                        vec, clr, fa, frangi, iso, fbr_msk, bc_msk):
+def write_frangi_arrays(out_img, out_slc, rng, z_out=None):
     """
-    Fill the memory-mapped output arrays of the Frangi filter stage.
+    Fill the output arrays of the Frangi filter stage.
 
     Parameters
     ----------
-    out_rng: tuple
-        3D slice output index range
+    out_img: dict
+        output image dictionary
 
-    z_sel: NumPy slice object
-        selected z-depth range
+            vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float32)
+                fiber orientation vector field
 
-    iso_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
-        isotropic fiber image slice
+            clr: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
+                orientation colormap image
 
-    frangi_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        Frangi-enhanced image slice
+            fa: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fractional anisotropy image
 
-    fbr_msk_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
-        fiber mask image slice
+            frangi: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                Frangi-enhanced image (fiber probability image)
 
-    bc_msk_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
-        soma mask image slice
+            iso: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                isotropic fiber image
 
-    vec_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        fiber orientation vector image slice
+            fbr_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fiber mask image
 
-    clr_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
-        orientation colormap image slice
+            bc_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                soma mask image
 
-    fa_slc: numpy.ndarray (axis order=(Z,Y,X), dtype=float32)
-        fractional anisotropy image slice
+            px_sz: numpy.ndarray (shape=(3,), dtype=float)
+                output pixel size [μm]
 
-    vec: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=float32)
-        fiber orientation vector field
+    out_slc: dict
+        slice output dictionary
 
-    clr: NumPy memory-map object (axis order=(Z,Y,X,C), dtype=uint8)
-        orientation colormap image
+            vec: numpy.ndarray (axis order=(Z,Y,X,C), dtype=float)
+                3D fiber orientation field
 
-    fa: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        fractional anisotropy image
+            clr: numpy.ndarray (axis order=(Z,Y,X,C), dtype=uint8)
+                orientation colormap
 
-    frangi: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        Frangi-enhanced image (fiber probability image)
+            fa: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fractional anisotropy
 
-    iso: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        isotropic fiber image
+            frangi: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                Frangi-enhanced image slice (fiber probability image)
 
-    fbr_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        fiber mask image
+            iso: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                isotropic fiber image slice
 
-    bc_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
-        soma mask image
+            ts_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                tissue mask slice
+
+            fbr_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=uint8)
+                fiber mask slice
+
+            bc_msk: numpy.ndarray (axis order=(Z,Y,X), dtype=bool)
+                brain cell mask slice
+
+    rng: NumPy slice object
+        output range
+
+    z_out: NumPy slice object
+        output z-range
 
     Returns
     -------
     None
     """
-    # fill memory-mapped output arrays
-    vec_rng_out = tuple(np.append(out_rng, slice(0, 3, 1)))
-    vec[vec_rng_out] = vec_slc[z_sel, ...]
-    clr[vec_rng_out] = clr_slc[z_sel, ...]
-    iso[out_rng] = iso_slc[z_sel, ...].astype(np.uint8)
-
-    # optional output images: Frangi filter response
-    if frangi is not None:
-        frangi[out_rng] = (255 * frangi_slc[z_sel, ...]).astype(np.uint8)
+    vec_rng = tuple(np.append(rng, slice(0, 3, 1)))
+    out_img['vec'][vec_rng] = out_slc['vec'][z_out, ...]
+    out_img['clr'][vec_rng] = out_slc['clr'][z_out, ...]
+    out_img['iso'][rng] = out_slc['iso'][z_out, ...].astype(np.uint8)
 
     # optional output images: fractional anisotropy
-    if fa is not None:
-        fa[out_rng] = fa_slc[z_sel, ...]
+    if out_img['fa'] is not None:
+        out_img['fa'][rng] = out_slc['fa'][z_out, ...]
+
+    # optional output images: Frangi filter response
+    if out_img['frangi'] is not None:
+        out_img['frangi'][rng] = (255 * out_slc['frangi'][z_out, ...]).astype(np.uint8)
 
     # optional output images: fiber mask
-    if fbr_msk is not None:
-        fbr_msk[out_rng] = (255 * (1 - fbr_msk_slc[z_sel, ...])).astype(np.uint8)
+    if out_img['fbr_msk'] is not None:
+        out_img['fbr_msk'][rng] = (255 * (1 - out_slc['fbr_msk'][z_out, ...])).astype(np.uint8)
 
     # optional output images: neuronal soma mask
-    if bc_msk is not None:
-        bc_msk[out_rng] = (255 * bc_msk_slc[z_sel, ...]).astype(np.uint8)
+    if out_img['bc_msk'] is not None:
+        out_img['bc_msk'][rng] = (255 * out_slc['bc_msk'][z_out, ...]).astype(np.uint8)

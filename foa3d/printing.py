@@ -76,7 +76,7 @@ def print_blur(sigma_um, psf_fwhm):
                f"Adjusted PSF FWHM    [μm]: ({psf_sz:.3f}, {psf_sz:.3f}, {psf_sz:.3f})")
 
 
-def print_frangi_info(in_img, frangi_cfg, in_slc_shp_um, tot_slc_num):
+def print_frangi_config(in_img, cfg):
     """
     Print Frangi filter stage heading.
 
@@ -125,7 +125,7 @@ def print_frangi_info(in_img, frangi_cfg, in_slc_shp_um, tot_slc_num):
             item_sz: int
                 image item size [B]
 
-    frangi_cfg: dict
+    cfg: dict
         Frangi filter configuration
 
             alpha: float
@@ -149,14 +149,8 @@ def print_frangi_info(in_img, frangi_cfg, in_slc_shp_um, tot_slc_num):
             px_sz: numpy.ndarray (shape=(3,), dtype=float)
                 pixel size [μm]
 
-            z_rng: int
-                output z-range in [px]
-
-            bc_ch: int
-                neuronal bodies channel
-
-            fb_ch: int
-                myelinated fibers channel
+            fb_thr: float or str
+                image thresholding applied to the Frangi filter response
 
             msk_bc: bool
                 if True, mask neuronal bodies within
@@ -168,47 +162,76 @@ def print_frangi_info(in_img, frangi_cfg, in_slc_shp_um, tot_slc_num):
             exp_all: bool
                 export all images
 
-    in_slc_shp_um: numpy.ndarray (shape=(3,), dtype=float)
-        shape of the analyzed image slices [μm]
+            rsz: numpy.ndarray (shape=(3,), dtype=float)
+                3D image resize ratio
 
-    tot_slc_num: int
-        total number of analyzed image slices
+            ram: float
+                    maximum RAM available to the Frangi filter stage [B]
+
+            jobs: int
+                number of parallel jobs (threads)
+                used by the Frangi filter stage
+
+            batch: int
+                slice batch size
+
+            slc_shp: numpy.ndarray (shape=(3,), dtype=int)
+                shape of the basic image slices
+                analyzed using parallel threads [px]
+
+            ovlp: int
+                overlapping range between image slices along each axis [px]
+
+            tot_slc: int
+                total number of image slices
+
+            z_out: NumPy slice object
+                output z-range
 
     Returns
     -------
     None
     """
-    # print Frangi filter sensitivity and scales
-    alpha = frangi_cfg['alpha']
-    beta = frangi_cfg['beta']
-    gamma = frangi_cfg['gamma']
-
-    scales_um = np.asarray(frangi_cfg['scales_um'])
+    # print Frangi filter sensitivity, scales and thresholding method
+    alpha = cfg['alpha']
+    beta = cfg['beta']
+    gamma = cfg['gamma']
+    scales_um = np.asarray(cfg['scales_um'])
     if gamma is None:
         gamma = 'auto'
 
-    print_flsh(color_text(0, 191, 255, "\n\n\n3D Frangi Filter\n") + "\nSensitivity\n" +
+    thr = cfg['fb_thr']
+    thr_str = "Filter response threshold:"
+    thr_str = f"{thr_str} {thr:.2f} (global)\n" if isinstance(thr, float) else f"{thr_str} {thr.capitalize()} (local)\n"
+
+    print_flsh(color_text(0, 191, 255, "\n3D Frangi Filter\n") + "\nSensitivity\n" +
                f"• plate-like \u03B1: {alpha:.1e}\n• blob-like  \u03B2: {beta:.1e}\n• background \u03B3: {gamma}\n\n" +
-               f"Enhanced scales      [μm]: {scales_um}\nEnhanced diameters   [μm]: {4 * scales_um}\n")
+               f"Enhanced scales      [μm]: {scales_um}\nEnhanced diameters   [μm]: {4 * scales_um}\n\n" + thr_str)
 
-    # print iterative analysis information
-    print_slicing_info(in_img['shape_um'], in_slc_shp_um, tot_slc_num, in_img['px_sz'], in_img['item_sz'])
+    # print parallel processing information
+    batch_sz = cfg['batch']
+    slc_shp_um = np.multiply(cfg['px_sz'], cfg['slc_shp'])
+    print_slicing_info(in_img['shape_um'], slc_shp_um, in_img['px_sz'], in_img['item_sz'], in_img['msk_bc'])
+    print_flsh(f"[Parallel(n_jobs={batch_sz})]: Using backend ThreadingBackend with {batch_sz} concurrent workers.")
 
-    # print neuron masking info
-    print_soma_masking(in_img['msk_bc'])
 
-
-def print_frangi_progress(info, is_valid, verbose=1):
+def print_frangi_progress(start_time, batch, tot, not_bg, verbose=5):
     """
     Print Frangi filter progress.
 
     Parameters
     ----------
-    info: tuple
-        info to be printed out
+    start_time: float
+        start time [s]
 
-    is_valid: bool
-        image slice validity flag
+    batch: int
+        slice batch size
+
+    tot: int
+        total number of image slices
+
+    not_bg: bool
+        foreground slice flag
 
     verbose: int
         verbosity level (print info only every "verbose" slices)
@@ -221,12 +244,11 @@ def print_frangi_progress(info, is_valid, verbose=1):
     slc_cnt += 1
 
     # print only every N=verbose image slices
-    start_time, batch_sz, tot_slc = info
-    if (slc_cnt % verbose == 0 and is_valid) or slc_cnt == tot_slc:
-        prog_prc = 100 * slc_cnt / tot_slc
+    if (slc_cnt % verbose == 0 and not_bg) or slc_cnt == tot:
+        prog = 100 * slc_cnt / tot
         _, hrs, mins, secs = elapsed_time(start_time)
-        print_flsh(f"[Parallel(n_jobs={batch_sz})]:\t{slc_cnt}/{tot_slc} done\t|\t" +
-                   f"elapsed: {hrs} hrs {mins} min {int(secs)} s\t{prog_prc:.1f}%")
+        print_flsh(
+            f"[Parallel(n_jobs={batch})]:\t{slc_cnt}/{tot} done\t|\telapsed: {hrs} hr {mins} min {secs} s\t{prog:.1f}%")
 
 
 def print_image_info(in_img):
@@ -237,18 +259,15 @@ def print_image_info(in_img):
     ----------
     in_img: dict
         input image dictionary
-        ('img_data': image data, 'ts_msk': tissue sample mask, 'ch_ax': channel axis)
 
     Returns
     -------
     None
     """
-    # get pixel and PSF sizes
+    # get image info
+    ch_ax = in_img['ch_ax']
     px_sz = in_img['px_sz']
     psf_fwhm = in_img['psf_fwhm']
-
-    # get channel axis (RGB image only)
-    ch_ax = in_img['ch_ax']
 
     # get image shape (ignore channel axis)
     img_shp = in_img['data'].shape
@@ -294,25 +313,8 @@ def print_odf_info(odf_scales_um, odf_degrees):
     -------
     None
     """
-    print_flsh(
-        color_text(0, 191, 255, "\n3D ODF Analysis") +
-        f"\n\nResolution   [μm]: {odf_scales_um}\nExpansion degrees: {odf_degrees}\n")
-
-
-def print_output_res(px_sz_iso):
-    """
-    Print the adjusted isotropic spatial resolution.
-
-    Parameters
-    ----------
-    px_sz_iso: numpy.ndarray (shape=(3,), dtype=float)
-        new isotropic pixel size [μm]
-
-    Returns
-    -------
-    None
-    """
-    print_flsh(f"Adjusted pixel size  [μm]: ({px_sz_iso[0]:.3f}, {px_sz_iso[1]:.3f}, {px_sz_iso[2]:.3f})\n")
+    print_flsh(color_text(0, 191, 255, "\n3D ODF Analysis") +
+               f"\n\nResolution   [μm]: {odf_scales_um}\nExpansion degrees: {odf_degrees}\n")
 
 
 def print_pipeline_heading():
@@ -338,7 +340,7 @@ def print_prepro_heading():
                "\n                              Z      Y      X")
 
 
-def print_slicing_info(img_shp_um, slc_shp_um, tot_slc_num, px_sz, img_item_sz):
+def print_slicing_info(img_shp_um, slc_shp_um, px_sz, item_sz, msk_bc):
     """
     Print information on the slicing of the basic image sub-volumes processed by the Foa3D tool.
 
@@ -350,14 +352,15 @@ def print_slicing_info(img_shp_um, slc_shp_um, tot_slc_num, px_sz, img_item_sz):
     slc_shp_um: numpy.ndarray (shape=(3,), dtype=float)
         shape of the analyzed image slices [μm]
 
-    tot_slc_num: int
-        total number of analyzed image slices
-
     px_sz: numpy.ndarray (shape=(3,), dtype=float)
         pixel size [μm]
 
-    img_item_sz: int
+    item_sz: int
         image item size (in bytes)
+
+    msk_bc: bool
+        if True, mask neuronal bodies within
+        the optionally provided channel
 
     Returns
     -------
@@ -367,37 +370,17 @@ def print_slicing_info(img_shp_um, slc_shp_um, tot_slc_num, px_sz, img_item_sz):
     if np.any(img_shp_um < slc_shp_um):
         slc_shp_um = img_shp_um
 
-    # get image memory size
-    img_sz = img_item_sz * np.prod(np.divide(img_shp_um, px_sz))
+    # get memory sizes
+    img_sz = item_sz * np.prod(np.divide(img_shp_um, px_sz))
+    max_slc_sz = item_sz * np.prod(np.divide(slc_shp_um, px_sz))
 
-    # get slice memory size
-    max_slc_sz = img_item_sz * np.prod(np.divide(slc_shp_um, px_sz))
-
-    # print info
+    # print total image and basic slices information
     print_flsh("\n                              Z      Y      X")
     print_flsh(f"Total image shape    [μm]: ({img_shp_um[0]:.1f}, {img_shp_um[1]:.1f}, {img_shp_um[2]:.1f})\n" +
                f"Total image size     [MB]: {np.ceil(img_sz / 1024**2).astype(int)}\n\n" +
                f"Image slice shape    [μm]: ({slc_shp_um[0]:.1f}, {slc_shp_um[1]:.1f}, {slc_shp_um[2]:.1f})\n" +
-               f"Image slice size     [MB]: {np.ceil(max_slc_sz / 1024**2).astype(int)}\n" +
-               f"Image slice number:        {tot_slc_num}\n")
-
-
-def print_soma_masking(msk_bc):
-    """
-    Print information on the optional masking of neuronal bodies.
-
-    Parameters
-    ----------
-    msk_bc: bool
-        if True, mask neuronal bodies within
-        the optionally provided channel
-
-    Returns
-    -------
-    None
-    """
-    prt = 'Soma mask: '
+               f"Image slice size     [MB]: {np.ceil(max_slc_sz / 1024**2).astype(int)}\n")
     if msk_bc:
-        print_flsh(f'{prt}active\n')
+        print_flsh('Soma mask: active\n')
     else:
-        print(f'{prt}not active\n')
+        print_flsh('Soma mask: not active\n')

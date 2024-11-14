@@ -12,54 +12,75 @@ from foa3d.printing import print_flsh
 from foa3d.utils import get_item_size
 
 
-def create_save_dirs(img_path, img_name, cli_args, is_vec=False):
+def create_save_dirs(cli_args, in_img):
     """
     Create saving directory.
 
     Parameters
     ----------
-    img_path: str
-        path to input microscopy volume image
-
-    img_name: str
-        name of the input volume image
-
     cli_args: see ArgumentParser.parse_args
         updated namespace of command line arguments
 
-    is_vec: bool
-        True when fiber orientation vectors are provided as input
-        to the pipeline
+    in_img: dict
+        input image dictionary
+            fb_ch: int
+                neuronal fibers channel
+
+            bc_ch: int
+                brain cell soma channel
+
+            msk_bc: bool
+                if True, mask neuronal bodies within
+                the optionally provided channel
+
+            psf_fwhm: numpy.ndarray (shape=(3,), dtype=float)
+                3D FWHM of the PSF [μm]
+
+            px_sz: numpy.ndarray (shape=(3,), dtype=float)
+                pixel size [μm]
+
+            path: str
+                path to the 3D microscopy image
+
+            name: str
+                name of the 3D microscopy image
+
+            fmt: str
+                format of the 3D microscopy image
+
+            is_tiled: bool
+                True for tiled reconstructions aligned using ZetaStitcher
+
+            is_vec: bool
+                vector field flag
 
     Returns
     -------
     save_dirs: dict
         saving directories
-        ('frangi': Frangi filter, 'odf': ODF analysis, 'tmp': temporary files)
-    """
-    # get current time
-    time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
+            frangi: Frangi filter
+
+            odf: ODF analysis
+
+            tmp: temporary data
+    """
     # get output path
     out_path = cli_args.out
     if out_path is None:
-        out_path = path.dirname(img_path)
+        out_path = path.dirname(in_img['path'])
 
     # create saving directory
-    base_out_dir = path.join(out_path, f"Foa3D_{time_stamp}_{img_name}")
+    time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    base_out_dir = path.join(out_path, f"Foa3D_{time_stamp}_{in_img['name']}")
     if not path.isdir(base_out_dir):
         makedirs(base_out_dir)
 
-    # initialize empty dictionary
-    save_dirs = dict()
-
     # create Frangi filter output subdirectory
-    if not is_vec:
-        frangi_dir = path.join(base_out_dir, 'frangi')
-        mkdir(frangi_dir)
-        save_dirs['frangi'] = frangi_dir
-    else:
-        save_dirs['frangi'] = None
+    save_dirs = {}
+    frangi_dir = path.join(base_out_dir, 'frangi')
+    mkdir(frangi_dir)
+    save_dirs['frangi'] = frangi_dir
 
     # create ODF analysis output subdirectory
     if cli_args.odf_res is not None:
@@ -70,8 +91,7 @@ def create_save_dirs(img_path, img_name, cli_args, is_vec=False):
         save_dirs['odf'] = None
 
     # create temporary directory
-    tmp_dir = tempfile.mkdtemp(dir=base_out_dir)
-    save_dirs['tmp'] = tmp_dir
+    save_dirs['tmp'] = tempfile.mkdtemp(dir=base_out_dir)
 
     return save_dirs
 
@@ -113,7 +133,7 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', ram=None):
 
     # check output format
     fmt = fmt.lower()
-    if fmt == 'tif' or fmt == 'tiff':
+    if fmt in ('tif', 'tiff'):
 
         # retrieve image pixel size
         px_sz_z, px_sz_y, px_sz_x = px_sz
@@ -123,7 +143,7 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', ram=None):
             nd_array = np.expand_dims(nd_array, 1)
 
         # adjust bigtiff optional argument
-        bigtiff = True if nd_array.itemsize * nd_array.size >= 4294967296 else False
+        bigtiff = nd_array.itemsize * nd_array.size >= 4294967296
         metadata = {'axes': 'ZCYX', 'spacing': px_sz_z, 'unit': 'um'}
         out_name = f'{fname}.{fmt}'
         with TiffWriter(path.join(save_dir, out_name), bigtiff=bigtiff, append=True) as tif:
@@ -144,7 +164,7 @@ def save_array(fname, save_dir, nd_array, px_sz=None, fmt='tiff', ram=None):
         raise ValueError("Unsupported data format!!!")
 
 
-def save_frangi_arrays(save_dir, img_name, out_img, px_sz, ram=None):
+def save_frangi_arrays(save_dir, img_name, out_img, ram=None):
     """
     Save the output arrays of the Frangi filter stage to TIF files.
 
@@ -178,8 +198,8 @@ def save_frangi_arrays(save_dir, img_name, out_img, px_sz, ram=None):
         bc_msk: NumPy memory-map object (axis order=(Z,Y,X), dtype=uint8)
             neuron mask image
 
-    px_sz: numpy.ndarray (shape=(3,), dtype=float)
-        pixel size (Z,Y,X) [μm]
+        px_sz: numpy.ndarray (shape=(3,), dtype=float)
+            pixel size (Z,Y,X) [μm]
 
     ram: float
         maximum RAM available
@@ -188,12 +208,11 @@ def save_frangi_arrays(save_dir, img_name, out_img, px_sz, ram=None):
     -------
     None
     """
-    # loop over output image dictionary fields and save to TIFF
+    # loop over output image dictionary fields and save to TIFF files
     for img_key in out_img.keys():
-        if out_img[img_key] is not None:
-            save_array(f'{img_key}_{img_name}', save_dir, out_img[img_key], px_sz, ram=ram)
+        if isinstance(out_img[img_key], np.ndarray) and img_key not in (None, 'iso'):
+            save_array(f'{img_key}_{img_name}', save_dir, out_img[img_key], out_img['px_sz'], ram=ram)
 
-    # print output directory
     print_flsh(f"\nFrangi filter arrays saved to: {save_dir}\n")
 
 

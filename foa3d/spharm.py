@@ -279,6 +279,8 @@ def sph_harm_degree_2(order, phi, sin_theta, cos_theta, norm):
         return norm[1] * 3 * sin_theta * cos_theta * np.cos(phi)
     elif order == 2:
         return norm[2] * 3 * sin_theta**2 * np.cos(2 * phi)
+    else:
+        raise ValueError('Invalid spherical harmonics order!')
 
 
 @njit(cache=True)
@@ -301,6 +303,8 @@ def sph_harm_degree_4(order, phi, sin_theta, cos_theta, norm):
         return norm[3] * 105 * sin_theta**3 * cos_theta * np.cos(3 * phi)
     elif order == 4:
         return norm[4] * 105 * sin_theta**4 * np.cos(4 * phi)
+    else:
+        raise ValueError('Invalid spherical harmonics order!')
 
 
 @njit(cache=True)
@@ -333,6 +337,8 @@ def sph_harm_degree_6(order, phi, sin_theta, cos_theta, norm):
         return norm[5] * 10395 * sin_theta**5 * cos_theta * np.cos(5 * phi)
     elif order == 6:
         return norm[6] * 10395 * sin_theta**6 * np.cos(6 * phi)
+    else:
+        raise ValueError('Invalid spherical harmonics order!')
 
 
 @njit(cache=True)
@@ -378,6 +384,8 @@ def sph_harm_degree_8(order, phi, sin_theta, cos_theta, norm):
         return norm[7] * 2027025 * sin_theta**7 * cos_theta * np.cos(7 * phi)
     elif order == 8:
         return norm[8] * 2027025 * sin_theta**8 * np.cos(8 * phi)
+    else:
+        raise ValueError('Invalid spherical harmonics order!')
 
 
 @njit(cache=True)
@@ -442,3 +450,5 @@ def sph_harm_degree_10(order, phi, sin_theta, cos_theta, norm):
         return norm[9] * 654729075 * sin_theta**9 * cos_theta * np.cos(9 * phi)
     elif order == 10:
         return norm[10] * 654729075 * sin_theta**10 * np.cos(10 * phi)
+    else:
+        raise ValueError('Invalid spherical harmonics order!')
