@@ -142,9 +142,9 @@ def compute_orientation_dispersion(vec_tnsr_eig, odi_pri, odi_sec, odi_tot, odi_
         odi_sec[:] = (0.5 - 0.3183098861837907 * np.arctan2(avte[..., 2], avte[..., 0])).astype(np.float32)
 
     # dispersion anisotropy
-    diff = np.abs(vec_tnsr_eig[..., 1] - vec_tnsr_eig[..., 0])
     if odi_anis is not None:
-        odi_anis[:] = (0.5 - 0.3183098861837907 * np.arctan2(avte[..., 2], diff)).astype(np.float32)
+        odi_anis[:] = (0.5 - 0.3183098861837907 \
+            * np.arctan2(avte[..., 2], np.abs(vec_tnsr_eig[..., 1] - vec_tnsr_eig[..., 0]))).astype(np.float32)
 
     # total dispersion
     odi_tot[:] = (0.5 - 0.3183098861837907 *
@@ -273,19 +273,19 @@ def init_odf_arrays(vec_img_shp, tmp_dir, scale, deg=6, exp_all=False):
     # initialize ODF and orientation dispersion maps
     nc = get_sph_harm_ncoeff(deg)
     odi_shp = tuple(np.ceil(np.divide(vec_img_shp, scale)).astype(int))
-    odf = create_memory_map(odi_shp + (nc,), dtype='float32', name=f'odf{scale}', tmp=tmp_dir)
-    odi_tot = create_memory_map(odi_shp, dtype='float32', name=f'odi_tot{scale}', tmp=tmp_dir)
-    bg_mrtrix = create_memory_map(tuple(np.flip(odi_shp)), dtype='uint8', name=f'bg{scale}', tmp=tmp_dir)
+    odf = create_memory_map('float32', shape=odi_shp + (nc,), name=f'odf{scale}', tmp=tmp_dir)
+    odi_tot = create_memory_map('float32', shape=odi_shp, name=f'odi_tot{scale}', tmp=tmp_dir)
+    bg_mrtrix = create_memory_map('uint8', shape=tuple(np.flip(odi_shp)), name=f'bg{scale}', tmp=tmp_dir)
     if exp_all:
-        odi_pri = create_memory_map(odi_shp, dtype='float32', name=f'odi_pri{scale}', tmp=tmp_dir)
-        odi_sec = create_memory_map(odi_shp, dtype='float32', name=f'odi_sec{scale}', tmp=tmp_dir)
-        odi_anis = create_memory_map(odi_shp, dtype='float32', name=f'odi_anis{scale}', tmp=tmp_dir)
+        odi_pri = create_memory_map('float32', shape=odi_shp, name=f'odi_pri{scale}', tmp=tmp_dir)
+        odi_sec = create_memory_map('float32', shape=odi_shp, name=f'odi_sec{scale}', tmp=tmp_dir)
+        odi_anis = create_memory_map('float32', shape=odi_shp, name=f'odi_anis{scale}', tmp=tmp_dir)
     else:
         odi_pri, odi_sec, odi_anis = (None, None, None)
 
     # initialize fiber orientation tensor, fiber density and orientation dispersion dictionary
-    vec_tnsr_eig = create_memory_map(odi_shp + (3,), dtype='float32', name=f'tensor{scale}', tmp=tmp_dir)
-    fbr_dnst = create_memory_map(odi_shp, dtype='float32', name=f'fbr_dnst{scale}', tmp=tmp_dir)
+    vec_tnsr_eig = create_memory_map('float32', shape=odi_shp + (3,), name=f'tensor{scale}', tmp=tmp_dir)
+    fbr_dnst = create_memory_map('float32', shape=odi_shp, name=f'fbr_dnst{scale}', tmp=tmp_dir)
     odi = {'odi_pri': odi_pri, 'odi_sec': odi_sec, 'odi_tot': odi_tot, 'odi_anis': odi_anis}
 
     return odf, odi, fbr_dnst, bg_mrtrix, vec_tnsr_eig
